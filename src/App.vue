@@ -25,16 +25,25 @@ html, body {
   position: relative;
 }
 
-/* 确保16:9比例的网页显示 */
-@media screen and (min-aspect-ratio: 16/9) {
-  body {
-    background: #000;
-  }
-  
-  #app {
-    max-width: 177.78vh; /* 16:9 比例 */
-    margin: 0 auto;
-    background: #fff;
-  }
+/* 普通页面使用16:9比例 */
+body:not(.map-body) #app {
+  max-width: 1920px; /* 典型的16:9宽屏分辨率 */
+  margin: 0 auto;
+  background: #fff;
+}
+
+/* 地图页面使用全屏显示 */
+body.map-body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body.map-body #app {
+  width: 100vw;
+  height: 100vh;
+  max-width: 100%;
+  margin: 0;
+  background: #fff;
 }
 </style>
