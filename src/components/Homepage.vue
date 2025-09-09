@@ -47,13 +47,8 @@
           <button 
             class="action-button"
             @click="startJourney"
-            :disabled="loading"
           >
-            <span v-if="!loading">开始骑行之旅</span>
-            <span v-else class="loading-text">
-              <span class="loading-spinner"></span>
-              加载中...
-            </span>
+            开始骑行之旅
           </button>
         </div>
       </div>
@@ -63,6 +58,10 @@
 
 <script setup>
 import { ref, reactive } from 'vue'
+import { useRouter } from 'vue-router'
+
+// 初始化路由
+const router = useRouter()
 
 // 导航项数据
 const navItems = ref([
@@ -87,9 +86,6 @@ const navItems = ref([
 // 下拉菜单显示状态
 const dropdownVisible = reactive({})
 
-// 加载状态
-const loading = ref(false)
-
 // 显示下拉菜单
 const showDropdown = (index) => {
   if (navItems.value[index].dropdown) {
@@ -104,13 +100,7 @@ const hideDropdown = (index) => {
 
 // 开始骑行之旅按钮点击事件
 const startJourney = () => {
-  loading.value = true
-  // 模拟加载过程
-  setTimeout(() => {
-    loading.value = false
-    // 这里可以添加跳转逻辑
-    console.log('跳转到骑行页面')
-  }, 2000)
+  router.push('/route')
 }
 </script>
 

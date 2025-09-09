@@ -2,7 +2,12 @@
   "compilerOptions": {
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    "baseUrl": ".",
+    "module": "esnext",
+    "moduleResolution": "node",
+    "jsx": "preserve"
   },
+  "include": ["src/**/*.js", "src/**/*.jsx", "src/**/*.vue"],
   "exclude": ["node_modules", "dist"]
 }
