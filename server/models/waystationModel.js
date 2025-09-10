@@ -24,7 +24,7 @@ class WaystationModel {
         "点名称" as name,
         "地址" as address,
         "longitude",
-        "latitude " as latitude,
+        "latitude" as latitude,
         "点备注" as remarks,
         "负责人联系方式" as contact,
         "图片" as image,
@@ -88,7 +88,7 @@ class WaystationModel {
         "点名称" as name,
         "地址" as address,
         "longitude",
-        "latitude " as latitude,
+        "latitude" as latitude,
         "点备注" as remarks,
         "负责人联系方式" as contact,
         "图片" as image,
@@ -122,7 +122,7 @@ class WaystationModel {
         "点名称" as name,
         "地址" as address,
         "longitude",
-        "latitude " as latitude,
+        "latitude" as latitude,
         "点备注" as remarks,
         "负责人联系方式" as contact,
         "图片" as image,
@@ -195,7 +195,7 @@ class WaystationModel {
         "点名称" as name,
         "地址" as address,
         "longitude",
-        "latitude " as latitude,
+        "latitude" as latitude,
         "点备注" as remarks,
         "负责人联系方式" as contact,
         "图片" as image,
@@ -264,7 +264,7 @@ class WaystationModel {
         "点名称" as name,
         "地址" as address,
         "longitude",
-        "latitude " as latitude,
+        "latitude" as latitude,
         "点备注" as remarks,
         "负责人联系方式" as contact,
         "图片" as image,
@@ -273,9 +273,9 @@ class WaystationModel {
         "还车" as bike_return,
         "维修" as maintenance
       FROM "public"."Waystation"
-      WHERE "latitude " BETWEEN $1 AND $2
+      WHERE "latitude" BETWEEN $1 AND $2
         AND "longitude" BETWEEN $3 AND $4
-        AND "latitude " IS NOT NULL 
+        AND "latitude" IS NOT NULL 
         AND "longitude" IS NOT NULL
       ORDER BY "ID" ASC
     `;

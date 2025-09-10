@@ -31,23 +31,28 @@
     <main class="main-content">
       <!-- 左侧地图容器 -->
       <div class="map-container">
-        <Map />
+        <Map ref="mapRef" />
       </div>
       
       <!-- 右侧功能面板 -->
       <div class="content-right">
         <!-- 标签栏 -->
         <div class="panel-tabs">
-          <div class="panel-tab active">路线规划</div>
-          <div class="panel-tab">热门路线</div>
-          <div class="panel-tab">驿站服务</div>
-          <div class="panel-tab">骑行攻略</div>
+          <div 
+            v-for="tab in ['路线规划', '热门路线', '驿站服务', '骑行攻略']"
+            :key="tab"
+            class="panel-tab"
+            :class="{ active: activeTab === tab }"
+            @click="switchTab(tab)"
+          >
+            {{ tab }}
+          </div>
         </div>
 
         <!-- 面板内容区 -->
         <div class="panel-content">
           <!-- 路线规划部分 -->
-          <div class="route-planning">
+          <div class="route-planning" v-show="activeTab === '路线规划'">
             <div class="input-group">
               <input type="text" placeholder="起点" />
             </div>
@@ -63,7 +68,7 @@
           </div>
 
           <!-- 热门路线展示 -->
-          <div class="route-cards">
+          <div class="route-cards" v-show="activeTab === '热门路线'">
             <div class="route-card">
               <div class="route-card-header">
                 <span class="route-card-title">环青海湖骑行线路</span>
@@ -86,6 +91,111 @@
               </div>
             </div>
           </div>
+
+          <!-- 驿站服务展示 -->
+          <div class="waystation-section" v-show="activeTab === '驿站服务'">
+            <!-- 搜索和筛选区域 -->
+            <div class="waystation-filters">
+              <div class="search-box">
+                <input 
+                  type="text" 
+                  v-model="searchQuery" 
+                  placeholder="搜索驿站名称或地址..."
+                  @input="filterWaystations"
+                />
+                <i class="search-icon">🔍</i>
+              </div>
+              
+              <!-- 服务类型筛选 -->
+              <div class="service-filters">
+                <div 
+                  v-for="(label, service) in serviceTypes" 
+                  :key="service"
+                  class="service-filter"
+                  :class="{ active: selectedServices[service] }"
+                  @click="toggleService(service)"
+                >
+                  <span class="service-icon">{{ serviceIcons[service] }}</span>
+                  {{ label }}
+                </div>
+              </div>
+            </div>
+
+            <!-- 驿站列表 -->
+            <div class="waystation-list">
+              <div 
+                v-for="station in filteredWaystations" 
+                :key="station.ID"
+                class="waystation-card"
+                @click="showStationDetails(station)"
+              >
+                <div class="waystation-header">
+                  <h3>{{ station.name }}</h3>
+                  <span class="region-badge">{{ station.region }}</span>
+                </div>
+                
+                <div class="waystation-info">
+                  <p class="address">
+                    <span class="info-icon">📍</span>
+                    {{ station.address }}
+                  </p>
+                  <p class="contact" v-if="station.contact">
+                    <span class="info-icon">📞</span>
+                    {{ station.contact }}
+                  </p>
+                </div>
+
+                <div class="service-badges">
+                  <span 
+                    v-for="(label, service) in serviceTypes" 
+                    :key="service"
+                    class="service-badge"
+                    :class="{ 
+                      'service-available': station[service] === 1,
+                      'service-unavailable': station[service] !== 1 
+                    }"
+                  >
+                    {{ serviceIcons[service] }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 驿站详情弹窗 -->
+            <div v-if="selectedStation" class="station-modal">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h2>{{ selectedStation.name }}</h2>
+                  <button class="close-button" @click="selectedStation = null">×</button>
+                </div>
+                <div class="modal-body">
+                  <div class="station-details">
+                    <p><strong>地区：</strong>{{ selectedStation.region }}</p>
+                    <p><strong>地址：</strong>{{ selectedStation.address }}</p>
+                    <p><strong>联系方式：</strong>{{ selectedStation.contact || '暂无' }}</p>
+                    <p><strong>备注：</strong>{{ selectedStation.remarks || '暂无' }}</p>
+                  </div>
+                  <div class="service-details">
+                    <h3>提供服务</h3>
+                    <div class="service-grid">
+                      <div 
+                        v-for="(label, service) in serviceTypes" 
+                        :key="service"
+                        class="service-item"
+                        :class="{ 'available': selectedStation[service] === 1 }"
+                      >
+                        <span class="service-icon">{{ serviceIcons[service] }}</span>
+                        <span class="service-name">{{ label }}</span>
+                        <span class="service-status">
+                          {{ selectedStation[service] === 1 ? '✓' : '✗' }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </main>
@@ -93,8 +203,119 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import Map from './Map.vue'
+import axios from 'axios'
+
+// 当前激活的标签页
+const activeTab = ref('路线规划')
+
+// 驿站数据相关
+const waystations = ref([])
+const filteredWaystations = ref([])
+const selectedStation = ref(null)
+const searchQuery = ref('')
+
+// 服务类型定义
+const serviceTypes = {
+  accommodation: '住宿',
+  bike_rental: '租车',
+  bike_return: '还车',
+  maintenance: '维修'
+}
+
+// 服务图标
+const serviceIcons = {
+  accommodation: '🏠',
+  bike_rental: '🚲',
+  bike_return: '🅿️',
+  maintenance: '🔧'
+}
+
+// 选中的服务筛选
+const selectedServices = reactive({
+  accommodation: false,
+  bike_rental: false,
+  bike_return: false,
+  maintenance: false
+})
+
+// 获取驿站数据
+const fetchWaystations = async () => {
+  try {
+    const response = await axios.get('/api/v1/waystations')
+    waystations.value = response.data.data
+    filteredWaystations.value = response.data.data
+  } catch (error) {
+    console.error('获取驿站数据失败：', error)
+  }
+}
+
+// 筛选驿站
+const filterWaystations = () => {
+  let filtered = waystations.value
+
+  // 搜索筛选
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase()
+    filtered = filtered.filter(station => 
+      station.name.toLowerCase().includes(query) ||
+      station.address.toLowerCase().includes(query)
+    )
+  }
+
+  // 服务类型筛选
+  const activeServices = Object.entries(selectedServices)
+    .filter(([_, value]) => value)
+    .map(([key]) => key)
+
+  if (activeServices.length > 0) {
+    filtered = filtered.filter(station =>
+      activeServices.every(service => station[service] === 1)
+    )
+  }
+
+  filteredWaystations.value = filtered
+
+  // 更新地图标记
+  if (mapRef.value && activeTab.value === '驿站服务') {
+    mapRef.value.updateMarkers(filtered)
+  }
+}
+
+// 切换服务筛选
+const toggleService = (service) => {
+  selectedServices[service] = !selectedServices[service]
+  filterWaystations()
+}
+
+// 地图组件引用
+const mapRef = ref(null)
+
+// 显示驿站详情
+const showStationDetails = (station) => {
+  selectedStation.value = station
+  
+  // 跳转到驿站位置
+  if (mapRef.value && station.longitude && station.latitude) {
+    mapRef.value.jumpToLocation(station.longitude, station.latitude)
+  }
+}
+
+// 切换标签页
+const switchTab = (tab) => {
+  activeTab.value = tab
+  
+  // 在切换到驿站服务标签时更新地图标记
+  if (tab === '驿站服务' && mapRef.value) {
+    mapRef.value.updateMarkers(filteredWaystations.value)
+  }
+}
+
+// 组件挂载时获取数据
+onMounted(() => {
+  fetchWaystations()
+})
 
 // 导航项数据（复用自Homepage）
 const navItems = ref([
@@ -437,6 +658,272 @@ const hideDropdown = (index) => {
 
 .difficulty-hard {
   background: #ffebee;
+  color: #f44336;
+}
+
+/* 驿站服务部分样式 */
+.waystation-section {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.waystation-filters {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.search-box {
+  position: relative;
+  margin-bottom: 15px;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 12px 40px 12px 15px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.search-box input:focus {
+  border-color: #4CAF50;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
+  outline: none;
+}
+
+.search-icon {
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #999;
+}
+
+.service-filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.service-filter {
+  padding: 8px 15px;
+  background: #f5f5f5;
+  border-radius: 20px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.service-filter:hover {
+  background: #e8f5e9;
+  color: #4CAF50;
+}
+
+.service-filter.active {
+  background: #4CAF50;
+  color: white;
+}
+
+.waystation-list {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  gap: 15px;
+  padding-right: 5px;
+}
+
+.waystation-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.waystation-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.waystation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.waystation-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #2c3e50;
+}
+
+.region-badge {
+  padding: 4px 12px;
+  background: #e8f5e9;
+  color: #4CAF50;
+  border-radius: 20px;
+  font-size: 12px;
+}
+
+.waystation-info {
+  margin: 15px 0;
+}
+
+.waystation-info p {
+  margin: 8px 0;
+  color: #666;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-icon {
+  font-size: 16px;
+}
+
+.service-badges {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.service-badge {
+  font-size: 18px;
+  opacity: 0.3;
+  transition: all 0.3s ease;
+}
+
+.service-badge.service-available {
+  opacity: 1;
+}
+
+/* 驿站详情弹窗 */
+.station-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.modal-header {
+  padding: 20px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h2 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.close-button:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.station-details p {
+  margin: 10px 0;
+  color: #666;
+}
+
+.station-details strong {
+  color: #333;
+}
+
+.service-details {
+  margin-top: 20px;
+}
+
+.service-details h3 {
+  color: #2c3e50;
+  margin-bottom: 15px;
+}
+
+.service-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 15px;
+}
+
+.service-item {
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+}
+
+.service-item.available {
+  background: #e8f5e9;
+}
+
+.service-icon {
+  font-size: 24px;
+}
+
+.service-name {
+  font-size: 14px;
+  color: #666;
+}
+
+.service-status {
+  font-size: 16px;
+  color: #4CAF50;
+}
+
+.service-item:not(.available) .service-status {
   color: #f44336;
 }
 
