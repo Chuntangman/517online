@@ -1,101 +1,217 @@
 <template>
   <div class="homepage">
-    <!-- 顶部导航栏 -->
-    <nav class="navbar">
-      <div class="nav-container">
-        <div 
-          v-for="(item, index) in navItems" 
-          :key="index"
-          class="nav-item"
-          @mouseenter="showDropdown(index)"
-          @mouseleave="hideDropdown(index)"
-        >
-          <button class="nav-button">{{ item.name }}</button>
+    <!-- 主标题区域 -->
+    <h1 class="title">517骑行驿站</h1>
+
+    <!-- 卡片容器 -->
+    <div class="container">
+      <div 
+        v-for="(image, index) in images" 
+        :key="image.id"
+        class="card-wrap"
+        @mousemove="handleMouseMove($event, index)"
+        @mouseenter="handleMouseEnter(index)"
+        @mouseleave="handleMouseLeave(index)"
+        :ref="`card-${index}`"
+      >
+        <div class="card" :style="getCardStyle(index)">
           <div 
-            v-if="item.dropdown && dropdownVisible[index]" 
-            class="dropdown"
-          >
-            <div 
-              v-for="(subItem, subIndex) in item.dropdown" 
-              :key="subIndex"
-              class="dropdown-item"
-            >
-              {{ subItem }}
-            </div>
+            class="card-bg" 
+            :style="[getCardBgTransform(index), getCardBgImage(image['存储(根目录路径)'])]"
+          ></div>
+          <div class="card-info">
+            <h1>{{ image['图片名'] }}</h1>
+            <p>{{ image['介绍'] }}</p>
           </div>
         </div>
       </div>
-    </nav>
+    </div>
 
-    <!-- 主内容区域 -->
-    <main class="main-content">
-      <!-- 背景滤镜层 -->
-      <div class="background-overlay"></div>
-      
-      <!-- 右侧内容区域 -->
-      <div class="content-area">
-        <!-- 主标题 -->
-        <h1 class="main-title">517骑行驿站</h1>
-        
-        <!-- 介绍文本 -->
-        <p class="intro-text">
-          欢迎来到517骑行驿站，探索最美骑行路线，结识志同道合的骑行伙伴，开启您的骑行冒险之旅。
-        </p>
-        
-        <!-- 行动按钮 -->
-        <div class="action-button-area">
-          <button 
-            class="action-button"
-            @click="startJourney"
-          >
-            开始骑行之旅
-          </button>
-        </div>
-      </div>
-    </main>
+    <!-- 开始骑行之旅按钮 -->
+    <div class="cta-section">
+      <button 
+        class="cta-button"
+        @click="startJourney"
+      >
+        开始骑行之旅
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import axios from 'axios'
 
 // 初始化路由
 const router = useRouter()
 
-// 导航项数据
-const navItems = ref([
-  {
-    name: '路线',
-    dropdown: ['海南岛', '千岛湖', '青海甘肃', '新疆-独库伊犁', '川藏川西&其他']
-  },
-  {
-    name: '驿站',
-    dropdown: null
-  },
-  {
-    name: '攻略',
-    dropdown: null
-  },
-  {
-    name: '活动',
-    dropdown: null
-  }
-])
+// 图片数据
+const images = ref([])
 
-// 下拉菜单显示状态
-const dropdownVisible = reactive({})
+// 卡片数据
+const cardData = reactive({})
 
-// 显示下拉菜单
-const showDropdown = (index) => {
-  if (navItems.value[index].dropdown) {
-    dropdownVisible[index] = true
+// 获取主页图片数据
+const fetchHomepageImages = async () => {
+  try {
+    const response = await axios.get('/api/v1/images/homepage')
+    if (response.data.success) {
+      images.value = response.data.data
+      // 初始化卡片数据
+      images.value.forEach((_, index) => {
+        cardData[index] = {
+          width: 0,
+          height: 0,
+          mouseX: 0,
+          mouseY: 0,
+          mouseLeaveDelay: null
+        }
+      })
+    }
+  } catch (error) {
+    // 如果API调用失败，使用默认数据
+    images.value = [
+      { id: 1, '图片名': '主页图1', '介绍': '探索最美的骑行路线', '存储(根目录路径)': 'public\\主页图\\列车.jpg' },
+      { id: 2, '图片名': '主页图2', '介绍': '发现沿途的美景', '存储(根目录路径)': 'public\\主页图\\海岸.jpg' },
+      { id: 3, '图片名': '主页图3', '介绍': '感受自然的魅力', '存储(根目录路径)': 'public\\主页图\\殿堂.jpg' },
+      { id: 4, '图片名': '主页图4', '介绍': '享受骑行的乐趣', '存储(根目录路径)': 'public\\主页图\\牧场.jpg' }
+    ]
+    // 初始化卡片数据
+    images.value.forEach((_, index) => {
+      cardData[index] = {
+        width: 0,
+        height: 0,
+        mouseX: 0,
+        mouseY: 0,
+        mouseLeaveDelay: null
+      }
+    })
   }
 }
 
-// 隐藏下拉菜单
-const hideDropdown = (index) => {
-  dropdownVisible[index] = false
+// 组件挂载后初始化
+onMounted(async () => {
+  await fetchHomepageImages()
+  
+  // 初始化卡片尺寸
+  setTimeout(() => {
+    images.value.forEach((_, index) => {
+      const cardElement = document.querySelector(`.card-wrap:nth-child(${index + 1})`)
+      if (cardElement) {
+        cardData[index].width = cardElement.offsetWidth
+        cardData[index].height = cardElement.offsetHeight
+      }
+    })
+  }, 50)
+})
+
+
+// 获取卡片旋转样式（优化版）
+const getCardStyle = (cardIndex) => {
+  if (!cardData[cardIndex] || !cardData[cardIndex].width) return { transform: 'rotateY(0deg) rotateX(0deg)' }
+  
+  const { mouseX, mouseY, width, height } = cardData[cardIndex]
+  const mousePX = mouseX / width
+  const mousePY = mouseY / height
+  
+  const rX = mousePX * 30
+  const rY = mousePY * -30
+  
+  return {
+    transform: `rotateY(${rX}deg) rotateX(${rY}deg)`
+  }
+}
+
+// 获取卡片背景移动样式（优化版）
+const getCardBgTransform = (cardIndex) => {
+  if (!cardData[cardIndex] || !cardData[cardIndex].width) return { transform: 'translateX(0px) translateY(0px)' }
+  
+  const { mouseX, mouseY, width, height } = cardData[cardIndex]
+  const mousePX = mouseX / width
+  const mousePY = mouseY / height
+  
+  const tX = mousePX * -40
+  const tY = mousePY * -40
+  
+  return {
+    transform: `translateX(${tX}px) translateY(${tY}px)`
+  }
+}
+
+// 获取图片源路径
+const getImageSrc = (imagePath) => {
+  if (!imagePath) return ''
+  
+  let cleanPath = ''
+  
+  // 处理不同格式的路径
+  if (imagePath.startsWith('public/') || imagePath.startsWith('public\\')) {
+    // 移除 public/ 或 public\ 前缀
+    cleanPath = '/' + imagePath.replace(/^public[\/\\]/, '').replace(/\\/g, '/')
+  } else if (imagePath.startsWith('/')) {
+    // 已经是绝对路径
+    cleanPath = imagePath
+  } else {
+    // 相对路径，添加前缀
+    cleanPath = '/' + imagePath.replace(/\\/g, '/')
+  }
+  
+  // 对中文字符进行URL编码
+  const parts = cleanPath.split('/')
+  const encodedParts = parts.map(part => part ? encodeURIComponent(part) : part)
+  return encodedParts.join('/')
+}
+
+// 获取背景图片样式
+const getCardBgImage = (imagePath) => {
+  const imageUrl = getImageSrc(imagePath)
+  return {
+    backgroundImage: imageUrl ? `url(${imageUrl})` : 'none'
+  }
+}
+
+// 节流函数
+const throttle = (func, limit) => {
+  let inThrottle
+  return function() {
+    const args = arguments
+    const context = this
+    if (!inThrottle) {
+      func.apply(context, args)
+      inThrottle = true
+      setTimeout(() => inThrottle = false, limit)
+    }
+  }
+}
+
+// 处理鼠标移动（节流优化）
+const handleMouseMove = throttle((e, cardIndex) => {
+  if (!cardData[cardIndex]) return
+  
+  const card = e.currentTarget
+  const rect = card.getBoundingClientRect()
+  
+  cardData[cardIndex].mouseX = e.clientX - rect.left - cardData[cardIndex].width / 2
+  cardData[cardIndex].mouseY = e.clientY - rect.top - cardData[cardIndex].height / 2
+}, 16) // 约60fps
+
+// 处理鼠标进入
+const handleMouseEnter = (cardIndex) => {
+  if (cardData[cardIndex]) {
+    clearTimeout(cardData[cardIndex].mouseLeaveDelay)
+  }
+}
+
+// 处理鼠标离开
+const handleMouseLeave = (cardIndex) => {
+  if (cardData[cardIndex]) {
+    cardData[cardIndex].mouseLeaveDelay = setTimeout(() => {
+      cardData[cardIndex].mouseX = 0
+      cardData[cardIndex].mouseY = 0
+    }, 1000)
+  }
 }
 
 // 开始骑行之旅按钮点击事件
@@ -105,342 +221,288 @@ const startJourney = () => {
 </script>
 
 <style scoped>
-.homepage {
-  width: 100vw;
-  height: 100vh;
-  position: relative;
-  background-image: url('../assets/左紧右松.jpg');
-  background-size: cover;
-  background-position: left center;
-  background-repeat: no-repeat;
-  overflow: hidden;
+/* 定义变量 */
+:root {
+  --hover-easing: cubic-bezier(0.23, 1, 0.32, 1);
+  --return-easing: cubic-bezier(0.445, 0.05, 0.55, 0.95);
+  --primary-bg: #BCAAA4;
+  --primary-text: #5D4037;
+  --text-white: #fff;
 }
 
-/* 背景滤镜层 */
-.background-overlay {
-  position: absolute;
-  top: 0;
+/* 全局样式 */
+.homepage {
+  width: 100vw !important;
+  min-height: 100vh;
+  background-color: var(--primary-bg);
+  font-family: "Raleway", "Microsoft YaHei", sans-serif;
+  font-weight: 500;
+  -webkit-font-smoothing: antialiased;
+  padding: 40px 0;
+  margin: 0 !important;
+  position: relative;
   left: 0;
   right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.2);
-  z-index: 1;
-}
-
-/* 顶部导航栏 */
-.navbar {
-  position: relative;
-  z-index: 100;
-  background: linear-gradient(135deg, #4CAF50, #45a049);
-  padding: 0;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-
-.nav-container {
-  display: flex;
-  align-items: center;
-  padding: 0 20px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.nav-item {
-  position: relative;
-  margin-right: 30px;
-}
-
-.nav-button {
-  background: none;
-  border: none;
-  color: white;
-  font-size: 16px;
-  font-weight: 500;
-  padding: 15px 20px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  border-radius: 5px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-.nav-button:hover {
-  background: rgba(255, 255, 255, 0.1);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-/* 下拉菜单 */
-.dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  background: white;
-  min-width: 180px;
-  border-radius: 8px;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
-  opacity: 0;
-  transform: translateY(-10px);
-  animation: dropdownShow 0.3s ease forwards;
-}
-
-@keyframes dropdownShow {
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.dropdown-item {
-  padding: 12px 20px;
-  color: #333;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.dropdown-item:last-child {
-  border-bottom: none;
-  border-radius: 0 0 8px 8px;
-}
-
-.dropdown-item:first-child {
-  border-radius: 8px 8px 0 0;
-}
-
-.dropdown-item:hover {
-  background: #f8f9fa;
-  color: #4CAF50;
-  transform: translateX(5px);
-}
-
-/* 主内容区域 */
-.main-content {
-  position: relative;
-  z-index: 50;
-  height: calc(100vh - 60px);
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 80px 0 40px;
-  box-sizing: border-box;
-}
-
-.content-area {
-  max-width: 45%;
-  min-width: 400px;
-  text-align: right;
-  animation: fadeInRight 1s ease-out;
-  padding: 40px 0;
-  position: relative;
-  z-index: 60;
-}
-
-@keyframes fadeInRight {
-  from {
-    opacity: 0;
-    transform: translateX(50px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
 }
 
 /* 主标题 */
-.main-title {
-  font-size: 3.5rem;
+.title {
+  font-family: "Raleway", "Microsoft YaHei", sans-serif;
+  font-size: 3rem;
   font-weight: 700;
-  color: #ffffff;
-  margin-bottom: 25px;
-  text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8), 1px 1px 3px rgba(0, 0, 0, 0.5);
-  letter-spacing: 2px;
-  line-height: 1.1;
-  font-family: 'Montserrat', 'Microsoft YaHei', sans-serif;
-  position: relative;
-  z-index: 70;
+  color: var(--primary-text);
+  text-align: center;
+  margin-bottom: 40px;
+  text-shadow: rgba(0, 0, 0, 0.1) 0 2px 4px;
 }
 
-/* 介绍文本 */
-.intro-text {
-  font-size: 1.1rem;
-  color: #ffffff;
-  line-height: 1.7;
-  margin-bottom: 35px;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8), 1px 1px 2px rgba(0, 0, 0, 0.6);
-  font-weight: 400;
-  max-width: 100%;
-  position: relative;
-  z-index: 70;
+/* 容器 */
+.container {
+  padding: 40px 80px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
-/* 行动按钮区域 */
-.action-button-area {
-  margin-top: 40px;
-  position: relative;
-  z-index: 80;
+/* 卡片包装器 */
+.card-wrap {
+  margin: 10px;
+  transform: perspective(800px);
+  transform-style: preserve-3d;
+  cursor: pointer;
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
-.action-button {
-  background: linear-gradient(135deg, #4CAF50, #45a049);
-  color: white;
+.card-wrap:hover .card-info {
+  transform: translateY(0);
+}
+
+.card-wrap:hover .card-info p {
+  opacity: 1;
+}
+
+.card-wrap:hover .card-info,
+.card-wrap:hover .card-info p {
+  transition: 0.6s var(--hover-easing);
+}
+
+.card-wrap:hover .card-info:after {
+  transition: 5s var(--hover-easing);
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.card-wrap:hover .card-bg {
+  transition: 
+    0.6s var(--hover-easing),
+    opacity 5s var(--hover-easing);
+  opacity: 0.8;
+}
+
+.card-wrap:hover .card {
+  transition:
+    0.6s var(--hover-easing),
+    box-shadow 2s var(--hover-easing);
+  box-shadow:
+    rgba(255, 255, 255, 0.2) 0 0 40px 5px,
+    rgba(255, 255, 255, 1) 0 0 0 1px,
+    rgba(0, 0, 0, 0.66) 0 30px 60px 0,
+    inset #333 0 0 0 5px,
+    inset white 0 0 0 6px;
+}
+
+/* 卡片 */
+.card {
+  position: relative;
+  flex: 0 0 240px;
+  width: 240px;
+  height: 320px;
+  background-color: transparent;
+  overflow: hidden;
+  border-radius: 10px;
+  box-shadow:
+    rgba(0, 0, 0, 0.66) 0 30px 60px 0,
+    inset #333 0 0 0 5px,
+    inset rgba(255, 255, 255, 0.5) 0 0 0 6px;
+  transition: 1s var(--return-easing);
+  transform: translateZ(0);
+  will-change: transform, box-shadow;
+}
+
+/* 卡片背景 */
+.card-bg {
+  opacity: 0.5;
+  position: absolute;
+  top: -20px;
+  left: -20px;
+  width: calc(100% + 40px);
+  height: calc(100% + 40px);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+  transition:
+    1s var(--return-easing),
+    opacity 5s 1s var(--return-easing);
+  pointer-events: none;
+  transform: translateZ(0);
+  will-change: transform, opacity;
+}
+
+/* 卡片信息 */
+.card-info {
+  padding: 20px;
+  position: absolute;
+  bottom: 0;
+  color: var(--text-white);
+  transform: translateY(40%);
+  transition: 0.6s 1.6s cubic-bezier(0.215, 0.61, 0.355, 1);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+
+.card-info p {
+  opacity: 0;
+  text-shadow: rgba(0, 0, 0, 1) 0 2px 3px;
+  transition: 0.6s 1.6s cubic-bezier(0.215, 0.61, 0.355, 1);
+  line-height: 1.5em;
+  margin-top: 10px;
+}
+
+.card-info * {
+  position: relative;
+  z-index: 1;
+}
+
+.card-info:after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  background-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.6) 100%);
+  background-blend-mode: overlay;
+  opacity: 0;
+  transform: translateY(100%);
+  transition: 5s 1s var(--return-easing);
+}
+
+.card-info h1 {
+  font-family: "Playfair Display", "Microsoft YaHei", serif;
+  font-size: 36px;
+  font-weight: 700;
+  text-shadow: rgba(0, 0, 0, 0.5) 0 10px 10px;
+}
+
+/* CTA区域 */
+.cta-section {
+  text-align: center;
+  margin-top: 60px;
+}
+
+.cta-button {
+  background: linear-gradient(135deg, var(--primary-text), #4E342E);
+  color: var(--text-white);
   border: none;
-  padding: 16px 35px;
-  font-size: 1rem;
+  padding: 18px 40px;
+  font-size: 1.1rem;
   font-weight: 600;
   border-radius: 50px;
   cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+  transition: all 0.3s var(--hover-easing);
+  box-shadow: 0 8px 25px rgba(93, 64, 55, 0.3);
   text-transform: uppercase;
   letter-spacing: 1px;
-  position: relative;
-  z-index: 90;
-  overflow: hidden;
+  font-family: "Raleway", sans-serif;
+  will-change: transform, box-shadow;
+  backface-visibility: hidden;
 }
 
-.action-button:hover:not(:disabled) {
+.cta-button:hover {
   transform: translateY(-3px);
-  box-shadow: 0 8px 25px rgba(76, 175, 80, 0.4);
-  background: linear-gradient(135deg, #45a049, #4CAF50);
+  box-shadow: 0 12px 35px rgba(93, 64, 55, 0.4);
+  background: linear-gradient(135deg, #4E342E, var(--primary-text));
 }
 
-.action-button:active:not(:disabled) {
+.cta-button:active {
   transform: translateY(-1px);
 }
 
-.action-button:disabled {
-  opacity: 0.8;
-  cursor: not-allowed;
-}
-
-/* 加载状态 */
-.loading-text {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-
-.loading-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top: 2px solid white;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* 响应式设计 - 16:9 比例优化 */
-@media (max-width: 1440px) {
-  .content-area {
-    max-width: 50%;
-    min-width: 350px;
-  }
-  
-  .main-title {
-    font-size: 3rem;
-  }
-}
-
+/* 响应式设计 */
 @media (max-width: 1200px) {
-  .main-content {
-    padding: 0 60px 0 30px;
+  .container {
+    padding: 40px 60px;
   }
   
-  .content-area {
-    max-width: 55%;
-    min-width: 320px;
-  }
-  
-  .main-title {
-    font-size: 2.8rem;
-  }
-  
-  .intro-text {
-    font-size: 1rem;
-  }
-}
-
-@media (max-width: 1024px) {
-  .homepage {
-    height: auto;
-    min-height: 100vh;
-  }
-  
-  .main-content {
-    height: auto;
-    min-height: calc(100vh - 60px);
-    padding: 40px 40px 0 20px;
-    justify-content: center;
-  }
-  
-  .content-area {
-    max-width: 70%;
-    min-width: 280px;
-    text-align: center;
-  }
-  
-  .main-title {
+  .title {
     font-size: 2.5rem;
   }
 }
 
-@media (max-width: 768px) {
-  .nav-container {
-    padding: 0 15px;
-    flex-wrap: wrap;
+@media (max-width: 1024px) {
+  .container {
+    padding: 40px 40px;
   }
   
-  .nav-item {
-    margin-right: 15px;
-    margin-bottom: 5px;
+  .card {
+    width: 220px;
+    height: 300px;
   }
   
-  .nav-button {
-    padding: 12px 15px;
-    font-size: 14px;
-  }
-  
-  .main-content {
-    padding: 20px;
-  }
-  
-  .content-area {
-    max-width: 90%;
-    min-width: auto;
-  }
-  
-  .main-title {
+  .title {
     font-size: 2.2rem;
   }
-  
-  .intro-text {
-    font-size: 0.95rem;
+}
+
+@media (max-width: 768px) {
+  .homepage {
+    padding: 20px 0;
   }
   
-  .action-button {
-    padding: 14px 28px;
-    font-size: 0.95rem;
+  .container {
+    padding: 20px;
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .card {
+    width: 280px;
+    height: 350px;
+  }
+  
+  .title {
+    font-size: 2rem;
+    margin-bottom: 30px;
+  }
+  
+  .card-info h1 {
+    font-size: 1.8rem;
   }
 }
 
 @media (max-width: 480px) {
-  .main-title {
+  .card {
+    width: 260px;
+    height: 320px;
+  }
+  
+  .title {
     font-size: 1.8rem;
   }
   
-  .intro-text {
+  .card-info h1 {
+    font-size: 1.5rem;
+  }
+  
+  .card-info p {
     font-size: 0.9rem;
   }
   
-  .action-button {
-    padding: 12px 25px;
-    font-size: 0.9rem;
+  .cta-button {
+    padding: 15px 30px;
+    font-size: 1rem;
   }
 }
 </style>

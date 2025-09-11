@@ -15,6 +15,7 @@ const { notFound, errorHandler } = require('./middleware/errorHandler');
 
 // 导入路由
 const waystationRoutes = require('./routes/waystationRoutes');
+const imageRoutes = require('./routes/imageRoutes');
 
 // 创建 Express 应用
 const app = express();
@@ -82,6 +83,9 @@ const API_PREFIX = process.env.API_PREFIX || '/api/v1';
 
 // 驿站相关路由
 app.use(`${API_PREFIX}/waystations`, waystationRoutes);
+
+// 图片相关路由
+app.use(`${API_PREFIX}/images`, imageRoutes);
 
 /**
  * API 文档路由（开发环境）

@@ -6,6 +6,7 @@
 </template>
 
 <style>
+/* 全局重置 */
 * {
   margin: 0;
   padding: 0;
@@ -19,16 +20,14 @@ html, body {
   overflow-x: hidden;
 }
 
+/* 确保#app完全填满屏幕 */
 #app {
-  width: 100vw;
+  width: 100vw !important;
   height: 100vh;
   position: relative;
-}
-
-/* 普通页面使用16:9比例 */
-body:not(.map-body) #app {
-  max-width: 1920px; /* 典型的16:9宽屏分辨率 */
-  margin: 0 auto;
+  margin: 0 !important;
+  padding: 0 !important;
+  max-width: none !important;
   background: #fff;
 }
 
