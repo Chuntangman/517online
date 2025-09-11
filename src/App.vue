@@ -13,11 +13,20 @@
   box-sizing: border-box;
 }
 
-html, body {
+html {
   width: 100%;
   height: 100%;
   font-family: 'Montserrat', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   overflow-x: hidden;
+  /* 移除全局背景，让各页面自行控制背景 */
+}
+
+body {
+  width: 100%;
+  height: 100%;
+  font-family: 'Montserrat', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow-x: hidden;
+  /* 恢复默认背景，让各页面自行控制 */
 }
 
 /* 确保#app完全填满屏幕 */
@@ -28,7 +37,7 @@ html, body {
   margin: 0 !important;
   padding: 0 !important;
   max-width: none !important;
-  background: #fff;
+  /* 让各页面组件控制自己的背景 */
 }
 
 /* 地图页面使用全屏显示 */
@@ -43,6 +52,6 @@ body.map-body #app {
   height: 100vh;
   max-width: 100%;
   margin: 0;
-  background: #fff;
+  /* 地图页面的特殊设置 */
 }
 </style>

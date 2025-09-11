@@ -28,7 +28,7 @@ class ImageModel {
     static async getHomepageImages() {
         const query = `
             SELECT * FROM public."517image" 
-            WHERE "图片名" IN ('主页图1', '主页图2', '主页图3', '主页图4')
+            WHERE "图片名" IN ('牧场', '殿堂', '海岸', '列车')
             ORDER BY "图片名" ASC
         `;
         try {

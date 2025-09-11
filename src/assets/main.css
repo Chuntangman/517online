@@ -1,9 +1,12 @@
 @import './base.css';
 
-/* 移除#app的限制性样式，让App.vue控制布局 */
+/* 移除#app的限制性样式，让子组件控制布局 */
 #app {
   font-weight: normal;
+  /* 让各页面组件控制自己的背景 */
 }
+
+/* 背景已在App.vue中设置，这里不再重复 */
 
 a,
 .green {
