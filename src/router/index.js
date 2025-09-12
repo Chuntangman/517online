@@ -10,7 +10,7 @@ const routes = [
   {
     path: '/route',
     name: 'Route',
-    component: () => import('@/components/route.vue')
+    component: () => import('@/components/route/RouteMain.vue')
   },
   {
     path: '/map',

@@ -30,43 +30,68 @@ const mapInstance = ref(null)
 
 // 跳转到指定位置
 const jumpToLocation = (longitude, latitude) => {
-  if (!mapInstance.value) return
+  console.log('Map.vue - jumpToLocation 被调用:', { longitude, latitude })
   
-  // 创建位置对象
-  const position = new AMap.LngLat(longitude, latitude)
+  if (!mapInstance.value) {
+    console.error('Map.vue - 地图实例未初始化，无法跳转到指定位置')
+    return false
+  }
   
-  // 平滑移动到目标位置
-  mapInstance.value.setZoomAndCenter(15, position, true)
+  if (!longitude || !latitude || isNaN(longitude) || isNaN(latitude)) {
+    console.error('Map.vue - 经纬度参数无效:', { longitude, latitude })
+    return false
+  }
   
-  // 创建带动画的图标内容
-  const animatedContent = `
-    <div class="custom-marker highlight-marker">
-      <img 
-        src="/marker-icon.png" 
-        style="width: 30px; height: 34px;"
-        onerror="this.src='https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png'"
-      />
-    </div>
-  `
+  try {
+    // 创建位置对象
+    const position = new AMap.LngLat(longitude, latitude)
+    
+    // 平滑移动到目标位置
+    mapInstance.value.setZoomAndCenter(15, position, true)
+    console.log('Map.vue - 地图跳转成功，目标位置:', { longitude, latitude })
+    
+    // 创建带动画的图标内容
+    const animatedContent = `
+      <div class="custom-marker highlight-marker">
+        <img 
+          src="/marker-icon.png" 
+          style="width: 30px; height: 34px;"
+          onerror="this.src='https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png'"
+        />
+      </div>
+    `
 
-  // 添加临时标记
-  const marker = new AMap.Marker({
-    position: position,
-    content: animatedContent,
-    offset: new AMap.Pixel(-15, -34)
-  })
-  
-  // 将标记添加到地图
-  marker.setMap(mapInstance.value)
-  
-  // 3秒后移除标记
-  setTimeout(() => {
-    marker.setMap(null)
-  }, 3000)
+    // 添加临时标记
+    const marker = new AMap.Marker({
+      position: position,
+      content: animatedContent,
+      offset: new AMap.Pixel(-15, -34)
+    })
+    
+    // 将标记添加到地图
+    marker.setMap(mapInstance.value)
+    
+    // 3秒后移除标记
+    setTimeout(() => {
+      marker.setMap(null)
+    }, 3000)
+    
+    return true
+  } catch (error) {
+    console.error('Map.vue - 地图跳转失败:', error)
+    return false
+  }
 }
 
 // 更新地图标记点
 const updateMarkers = (filteredStations) => {
+  if (!mapInstance.value || !filteredStations) {
+    console.warn('地图实例未初始化或数据为空，无法更新标记点')
+    return
+  }
+  
+  console.log('正在更新地图标记点，驿站数量:', filteredStations.length)
+  
   // 清除所有现有标记点
   markers.value.forEach(marker => {
     marker.setMap(null)

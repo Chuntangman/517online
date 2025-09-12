@@ -49,6 +49,28 @@ class ImageController {
         }
     }
 
+    // 根据图片名获取图片（用于驿站图片展示）
+    static async getImagesByName(req, res, next) {
+        try {
+            const { name } = req.params;
+            if (!name) {
+                return res.status(400).json({
+                    success: false,
+                    message: '图片名称不能为空'
+                });
+            }
+
+            const images = await ImageModel.getImagesByName(name);
+            res.json({
+                success: true,
+                data: images,
+                count: images.length
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     // 创建新图片
     static async createImage(req, res, next) {
         try {

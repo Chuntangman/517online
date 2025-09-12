@@ -8,6 +8,9 @@ router.get('/', ImageController.getAllImages);
 // 获取主页图片
 router.get('/homepage', ImageController.getHomepageImages);
 
+// 根据图片名获取图片（用于驿站图片展示）
+router.get('/name/:name', ImageController.getImagesByName);
+
 // 获取单个图片
 router.get('/:id', ImageController.getImageById);
 

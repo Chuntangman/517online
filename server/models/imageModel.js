@@ -39,6 +39,21 @@ class ImageModel {
         }
     }
 
+    // 根据图片名获取图片（用于驿站图片展示）
+    static async getImagesByName(imageName) {
+        const query = `
+            SELECT * FROM public."517image" 
+            WHERE "图片名" = $1
+            ORDER BY id ASC
+        `;
+        try {
+            const result = await pool.query(query, [imageName]);
+            return result.rows;
+        } catch (error) {
+            throw error;
+        }
+    }
+
     // 创建新图片记录
     static async createImage(imageData) {
         const query = `
