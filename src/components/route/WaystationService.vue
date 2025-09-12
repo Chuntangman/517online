@@ -1,5 +1,15 @@
 <template>
   <div class="waystation-section">
+    <!-- 地区信息提示 -->
+    <div class="region-info">
+      <p v-if="selectedRegion === '全部'">
+        显示所有地区的驿站
+      </p>
+      <p v-else>
+        显示 <strong>{{ selectedRegion }}</strong> 地区的驿站
+      </p>
+    </div>
+
     <!-- 搜索和筛选区域 -->
     <div class="waystation-filters">
       <div class="search-box">
@@ -196,6 +206,7 @@ const {
   selectedServices,
   serviceTypes,
   serviceIcons,
+  selectedRegion,
   fetchWaystations,
   filterWaystations,
   toggleService,
@@ -305,6 +316,13 @@ watch(() => props.activeTab, (newTab) => {
   }
 }, { immediate: true })
 
+// 监听地区变化，重新筛选数据
+watch(selectedRegion, (newRegion) => {
+  console.log('地区变化，重新筛选驿站数据:', newRegion)
+  // 无论当前是否在驿站服务面板，都要更新筛选结果
+  handleFilterChange()
+}, { immediate: false })
+
 // 组件卸载时清理所有轮播定时器
 onUnmounted(() => {
   cleanupCarousels()
@@ -328,6 +346,26 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+/* 地区信息样式 */
+.region-info {
+  text-align: center;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.region-info p {
+  margin: 0;
+  color: #1976d2;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.region-info strong {
+  color: #0d47a1;
 }
 
 .waystation-filters {

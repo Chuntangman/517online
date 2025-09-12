@@ -6,6 +6,7 @@
 import { ref, reactive } from 'vue'
 import axios from 'axios'
 import { serviceTypes, serviceIcons } from '@/config/routeConfig.js'
+import { useRegions } from './useRegions.js'
 
 export function useWaystation() {
   // 驿站数据相关
@@ -13,6 +14,9 @@ export function useWaystation() {
   const filteredWaystations = ref([])
   const selectedStation = ref(null)
   const searchQuery = ref('')
+  
+  // 使用地区管理
+  const { selectedRegion, filterByRegion } = useRegions()
   
   // 选中的服务筛选
   const selectedServices = reactive({
@@ -88,6 +92,9 @@ export function useWaystation() {
   const filterWaystations = (mapRef = null, activeTab = null) => {
     let filtered = waystations.value
 
+    // 地区筛选
+    filtered = filterByRegion(filtered, 'region')
+
     // 搜索筛选
     if (searchQuery.value) {
       const query = searchQuery.value.toLowerCase()
@@ -141,7 +148,8 @@ export function useWaystation() {
     Object.keys(selectedServices).forEach(key => {
       selectedServices[key] = false
     })
-    filteredWaystations.value = waystations.value
+    // 重置时也要应用地区筛选
+    filterWaystations()
   }
   
   return {
@@ -153,6 +161,7 @@ export function useWaystation() {
     selectedServices,
     serviceTypes,
     serviceIcons,
+    selectedRegion,
     
     // 方法
     fetchWaystations,

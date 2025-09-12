@@ -6,6 +6,11 @@
 // 导航项配置
 export const navItems = [
   {
+    name: '地区',
+    dropdown: ['全部'], // 初始只有全部，实际数据通过API获取
+    isRegionNav: true // 标识这是地区导航
+  },
+  {
     name: '路线规划',
     dropdown: null
   },
@@ -20,10 +25,6 @@ export const navItems = [
   {
     name: '骑行攻略',
     dropdown: null
-  },
-  {
-    name: '地区',
-    dropdown: ['海南岛', '千岛湖', '青海甘肃', '新疆-独库伊犁', '川藏川西&其他']
   }
 ]
 

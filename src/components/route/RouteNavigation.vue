@@ -5,12 +5,17 @@
         v-for="(item, index) in navigationItems" 
         :key="index"
         class="nav-item"
-        :class="{ active: activeTab === item.name }"
+        :class="{ 
+          active: activeTab === item.name,
+          'region-nav': item.isRegionNav
+        }"
         @click="handleNavClick(item.name)"
         @mouseenter="showNavDropdown(index)"
         @mouseleave="hideNavDropdown(index)"
       >
-        <a href="#0" class="nav-link">{{ item.name }}</a>
+        <a href="#0" class="nav-link">
+          {{ item.isRegionNav && selectedRegion !== '全部' ? selectedRegion : item.name }}
+        </a>
         <ol 
           v-if="item.dropdown && navDropdownVisible[index]" 
           class="sub-nav"
@@ -49,7 +54,8 @@ const {
   switchTab,
   showNavDropdown,
   hideNavDropdown,
-  handleSubNavClick: originalHandleSubNavClick
+  handleSubNavClick: originalHandleSubNavClick,
+  selectedRegion
 } = useNavigation()
 
 // 处理导航点击
@@ -60,9 +66,15 @@ const handleNavClick = (tabName) => {
 
 // 处理子导航点击
 const handleSubNavClick = (subItem) => {
-  originalHandleSubNavClick(subItem)
-  emit('sub-nav-clicked', subItem)
-  emit('tab-changed', subItem)
+  // 调用原始的处理函数，它会返回是否是地区选择
+  const isRegionSelection = originalHandleSubNavClick(subItem)
+  
+  // 只有当不是地区选择时才发射事件
+  if (!isRegionSelection) {
+    emit('sub-nav-clicked', subItem)
+    emit('tab-changed', subItem)
+  }
+  // 地区选择时不发射任何事件，避免面板跳转
 }
 
 // 暴露给父组件的方法和数据
@@ -108,23 +120,46 @@ defineExpose({
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
-.nav-item:nth-of-type(1):before {
-  background: #00ACC1;
+/* 地区导航特殊样式 */
+.nav-item.region-nav:before {
+  background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%);
+}
+
+.nav-item.region-nav {
+  background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 50%, #FF9F43 100%);
+  border: 2px solid rgba(255, 107, 107, 0.3);
+  border-radius: 8px 8px 0 0;
+}
+
+.nav-item.region-nav .nav-link {
+  color: #ffffff;
+  font-weight: 600;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.nav-item.region-nav:hover .nav-link,
+.nav-item.region-nav.active .nav-link {
+  color: #2c3e50;
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.6);
 }
 
 .nav-item:nth-of-type(2):before {
-  background: #26C6DA;
+  background: #00ACC1;
 }
 
 .nav-item:nth-of-type(3):before {
-  background: #4DD0E1;
+  background: #26C6DA;
 }
 
 .nav-item:nth-of-type(4):before {
-  background: #80DEEA;
+  background: #4DD0E1;
 }
 
 .nav-item:nth-of-type(5):before {
+  background: #80DEEA;
+}
+
+.nav-item:nth-of-type(6):before {
   background: #B2EBF2;
 }
 

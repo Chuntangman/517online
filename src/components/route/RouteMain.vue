@@ -50,12 +50,10 @@
             @guide-item-clicked="handleGuideItemClick"
           />
 
-          <!-- 地区选择和路线展示 -->
+          <!-- 地区信息展示 -->
           <RegionContent 
-            v-show="activeTab === '地区' || regions.includes(activeTab)"
+            v-show="activeTab === '地区'"
             :activeTab="activeTab"
-            @region-selected="handleRegionSelected"
-            @back-to-regions="handleBackToRegions"
           />
         </div>
       </div>
@@ -74,7 +72,7 @@ import CyclingGuide from './CyclingGuide.vue'
 import RegionContent from './RegionContent.vue'
 import { useNavigation } from '@/composables/useNavigation.js'
 import { useWaystation } from '@/composables/useWaystation.js'
-import { regions } from '@/config/routeConfig.js'
+// 移除了 regions 的导入，因为现在通过导航栏处理地区选择
 
 // 使用组合式函数
 const { activeTab } = useNavigation()
@@ -92,6 +90,10 @@ const handleTabChanged = (tab) => {
 
 // 处理子导航点击
 const handleSubNavClick = (subItem) => {
+  // 这个函数现在由RouteNavigation组件控制是否调用
+  // 只有非地区选择时才会调用到这里
+  // 地区选择已经在RouteNavigation中被过滤掉，不会到达这里
+  console.log('切换到面板:', subItem)
   activeTab.value = subItem
 }
 
@@ -155,15 +157,7 @@ const handleGuideItemClick = (guideData) => {
   console.log('点击攻略项:', guideData)
 }
 
-// 处理地区选择
-const handleRegionSelected = (region) => {
-  activeTab.value = region
-}
-
-// 处理返回地区选择
-const handleBackToRegions = () => {
-  activeTab.value = '地区'
-}
+// 地区选择现在通过导航栏处理，移除相关处理函数
 
 // 组件挂载时的初始化
 onMounted(() => {
