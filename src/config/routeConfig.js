@@ -23,7 +23,7 @@ export const navItems = [
     dropdown: null
   },
   {
-    name: '骑行攻略',
+    name: '常用地点',
     dropdown: null
   }
 ]

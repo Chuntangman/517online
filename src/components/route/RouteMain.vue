@@ -5,6 +5,14 @@
       <!-- 左侧地图容器 -->
       <div class="map-container">
         <Map ref="mapRef" />
+        <!-- 天气组件 - 左下角 -->
+        <div class="weather-container">
+          <Weather 
+            :longitude="currentLongitude"
+            :latitude="currentLatitude"
+            ref="weatherRef"
+          />
+        </div>
       </div>
       
       <!-- 右侧功能面板 -->
@@ -44,10 +52,11 @@
             ref="waystationRef"
           />
 
-          <!-- 骑行攻略展示 -->
+          <!-- 常用地点展示 -->
           <CyclingGuide 
-            v-show="activeTab === '骑行攻略'"
-            @guide-item-clicked="handleGuideItemClick"
+            v-show="activeTab === '常用地点'"
+            @destination-selected="handleDestinationSelected"
+            @destinations-filtered="handleDestinationsFiltered"
           />
 
           <!-- 地区信息展示 -->
@@ -62,8 +71,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onActivated, nextTick } from 'vue'
 import Map from '@/components/Map.vue'
+import Weather from '@/components/Weather.vue'
 import RouteNavigation from './RouteNavigation.vue'
 import RoutePlanning from './RoutePlanning.vue'
 import PopularRoutes from './PopularRoutes.vue'
@@ -82,10 +92,30 @@ const { fetchWaystations, filteredWaystations } = useWaystation()
 const mapRef = ref(null)
 const navigationRef = ref(null)
 const waystationRef = ref(null)
+const weatherRef = ref(null)
+
+// 天气组件的经纬度数据 (默认使用地图初始中心点)
+const currentLongitude = ref(116.397428) // 北京经度
+const currentLatitude = ref(39.90923)    // 北京纬度
+
+// 当前筛选数据状态
+const currentFilteredWaystations = ref([])
+const currentFilteredDestinations = ref([])
 
 // 处理标签页切换
 const handleTabChanged = (tab) => {
   activeTab.value = tab
+  
+  // 切换地图显示模式，传递对应的筛选数据
+  if (mapRef.value) {
+    let filteredData = null
+    if (tab === '驿站服务') {
+      filteredData = currentFilteredWaystations.value
+    } else if (tab === '常用地点') {
+      filteredData = currentFilteredDestinations.value
+    }
+    mapRef.value.switchMapMode(tab, filteredData)
+  }
 }
 
 // 处理子导航点击
@@ -95,6 +125,17 @@ const handleSubNavClick = (subItem) => {
   // 地区选择已经在RouteNavigation中被过滤掉，不会到达这里
   console.log('切换到面板:', subItem)
   activeTab.value = subItem
+  
+  // 切换地图显示模式，传递对应的筛选数据
+  if (mapRef.value) {
+    let filteredData = null
+    if (subItem === '驿站服务') {
+      filteredData = currentFilteredWaystations.value
+    } else if (subItem === '常用地点') {
+      filteredData = currentFilteredDestinations.value
+    }
+    mapRef.value.switchMapMode(subItem, filteredData)
+  }
 }
 
 // 处理路线生成
@@ -129,6 +170,10 @@ const handleStationSelected = (station) => {
     try {
       mapRef.value.jumpToLocation(station.longitude, station.latitude)
       console.log('地图跳转成功')
+      
+      // 更新天气位置
+      updateWeatherLocation(station.longitude, station.latitude)
+      console.log('已更新天气位置到驿站坐标')
     } catch (error) {
       console.error('地图跳转失败:', error)
     }
@@ -146,30 +191,114 @@ const handleStationSelected = (station) => {
 const handleFiltersChanged = (filtered) => {
   console.log('筛选结果变化:', filtered.length, '个驿站')
   
+  // 保存当前筛选状态
+  currentFilteredWaystations.value = filtered
+  
   // 同步更新地图标记点
   if (mapRef.value && activeTab.value === '驿站服务') {
     mapRef.value.updateMarkers(filtered)
   }
 }
 
-// 处理攻略项目点击
-const handleGuideItemClick = (guideData) => {
-  console.log('点击攻略项:', guideData)
+// 处理常用地点选择
+const handleDestinationSelected = (destination) => {
+  console.log('选择常用地点:', destination)
+  
+  // 如果有经纬度信息，可以跳转到地图位置
+  if (mapRef.value && destination.longitude && destination.latitude) {
+    console.log('正在跳转到地点位置:', destination.name, destination.longitude, destination.latitude)
+    try {
+      // 使用目标点标记类型进行跳转
+      mapRef.value.jumpToLocation(destination.longitude, destination.latitude, 'destination')
+      console.log('地图跳转成功')
+      
+      // 更新天气位置
+      updateWeatherLocation(destination.longitude, destination.latitude)
+      console.log('已更新天气位置到地点坐标')
+    } catch (error) {
+      console.error('地图跳转失败:', error)
+    }
+  }
+}
+
+// 处理目标点筛选变化
+const handleDestinationsFiltered = (filteredDestinations) => {
+  console.log('目标点筛选结果变化:', filteredDestinations.length, '个地点')
+  
+  // 保存当前筛选状态
+  currentFilteredDestinations.value = filteredDestinations
+  
+  // 同步更新地图标记点
+  if (mapRef.value && activeTab.value === '常用地点') {
+    mapRef.value.updateDestinationMarkers(filteredDestinations)
+  }
 }
 
 // 地区选择现在通过导航栏处理，移除相关处理函数
 
+// 检查并重新初始化地图
+const checkAndReinitializeMap = async () => {
+  console.log('检查地图状态')
+  
+  if (!mapRef.value) {
+    console.warn('地图引用不存在')
+    return
+  }
+  
+  // 等待DOM更新
+  await nextTick()
+  
+  // 检查地图是否已初始化
+  if (!mapRef.value.isMapInitialized) {
+    console.log('地图未初始化，正在重新初始化...')
+    try {
+      await mapRef.value.reinitializeMap()
+      console.log('地图重新初始化成功')
+    } catch (error) {
+      console.error('地图重新初始化失败:', error)
+    }
+  } else {
+    console.log('地图已正常初始化')
+  }
+}
+
 // 组件挂载时的初始化
-onMounted(() => {
+onMounted(async () => {
   console.log('RouteMain 组件已挂载')
-  // 驿站数据由 WaystationService 组件自己获取
+  
+  // 延迟检查地图状态，确保DOM完全渲染
+  setTimeout(checkAndReinitializeMap, 100)
 })
+
+// 路由激活时的处理（当从其他路由切换回来时）
+onActivated(async () => {
+  console.log('RouteMain 组件被激活（路由切换回来）')
+  
+  // 延迟检查地图状态，确保容器尺寸正确
+  setTimeout(checkAndReinitializeMap, 300)
+})
+
+// 更新天气位置（预留接口，供后续经纬度获取逻辑调用）
+const updateWeatherLocation = (longitude, latitude) => {
+  console.log('更新天气位置:', { longitude, latitude })
+  currentLongitude.value = longitude
+  currentLatitude.value = latitude
+  
+  // 通知天气组件更新
+  if (weatherRef.value) {
+    weatherRef.value.getWeatherInfo(longitude, latitude)
+  }
+}
 
 // 暴露给父组件的方法和数据
 defineExpose({
   activeTab,
   mapRef,
-  filteredWaystations
+  filteredWaystations,
+  weatherRef,
+  updateWeatherLocation,
+  currentLongitude,
+  currentLatitude
 })
 </script>
 
@@ -204,6 +333,15 @@ defineExpose({
     0 8px 32px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(4px);
+}
+
+/* 天气组件容器 */
+.weather-container {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  z-index: 300;
+  pointer-events: auto;
 }
 
 /* 右侧功能面板 */
