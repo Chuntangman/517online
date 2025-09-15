@@ -145,6 +145,19 @@ router.get('/popular',
 router.get('/statistics', RouteController.getRouteStatistics);
 
 /**
+ * @route   GET /api/v1/routes/:id/waypoints
+ * @desc    获取路线的途径点详情
+ * @access  Public
+ * @params  id (路径参数)
+ */
+router.get('/:id/waypoints',
+  [
+    param('id').isInt({ min: 1 }).withMessage('ID 必须是正整数')
+  ],
+  RouteController.getRouteWaypoints
+);
+
+/**
  * @route   GET /api/v1/routes/:id
  * @desc    根据 ID 获取单个路线详情
  * @access  Public

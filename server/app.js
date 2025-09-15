@@ -142,6 +142,7 @@ if (NODE_ENV === 'development') {
           'GET /routes/waypoints/any': '根据途径地点ID筛选路线（包含任一地点）',
           'GET /routes/popular': '获取热门路线',
           'GET /routes/statistics': '获取路线统计信息',
+          'GET /routes/:id/waypoints': '获取路线的途径点详情',
           'GET /routes/:id': '获取单个路线详情'
         }
       },
@@ -176,6 +177,7 @@ if (NODE_ENV === 'development') {
         getRoutesByWaypointsAll: `${API_PREFIX}/routes/waypoints/all?ids=1,2,3`,
         getRoutesByWaypointsAny: `${API_PREFIX}/routes/waypoints/any?ids=1,2,3`,
         getPopularRoutes: `${API_PREFIX}/routes/popular?limit=5`,
+        getRouteWaypoints: `${API_PREFIX}/routes/1/waypoints`,
         getRouteById: `${API_PREFIX}/routes/1`
       }
     });

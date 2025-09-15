@@ -54,14 +54,117 @@
         </div>
       </div>
     </div>
+
+    <!-- 路线详情弹窗 -->
+    <div v-if="showRouteDetail" class="route-detail-modal" @click="closeRouteDetail">
+      <div class="route-detail-content" @click.stop>
+        <div class="route-detail-header">
+          <h3>{{ selectedRouteDetail?.route?.name || '路线详情' }}</h3>
+          <button class="close-button" @click="closeRouteDetail">×</button>
+        </div>
+        
+        <div class="route-detail-body">
+          <!-- 路线基本信息 -->
+          <div class="route-basic-info">
+            <div class="info-item">
+              <span class="label">地区:</span>
+              <span class="value">{{ selectedRouteDetail?.route?.region || '暂无' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="label">总距离:</span>
+              <span class="value">{{ selectedRouteDetail?.route?.distance_km ? selectedRouteDetail.route.distance_km + 'km' : '暂无' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="label">预计天数:</span>
+              <span class="value">{{ selectedRouteDetail?.route?.estimated_days ? selectedRouteDetail.route.estimated_days + '天' : '暂无' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="label">路况:</span>
+              <span class="value">{{ selectedRouteDetail?.route?.road_condition || '暂无' }}</span>
+            </div>
+            <div v-if="selectedRouteDetail?.route?.remarks" class="info-item">
+              <span class="label">备注:</span>
+              <span class="value">{{ selectedRouteDetail.route.remarks }}</span>
+            </div>
+            <div v-if="selectedRouteDetail?.route?.precautions" class="info-item">
+              <span class="label">注意事项:</span>
+              <span class="value">{{ selectedRouteDetail.route.precautions }}</span>
+            </div>
+          </div>
+
+          <!-- 途径点列表 -->
+          <div class="waypoints-section">
+            <h4>途径地点</h4>
+            <div v-if="waypointsLoading" class="waypoints-loading">
+              <p>正在加载途径点信息...</p>
+            </div>
+            <div v-else-if="waypointsError" class="waypoints-error">
+              <p>加载途径点失败: {{ waypointsError }}</p>
+            </div>
+            <div v-else-if="!selectedRouteDetail?.waypoints || selectedRouteDetail.waypoints.length === 0" class="waypoints-empty">
+              <p>暂无途径点信息</p>
+            </div>
+            <div v-else class="waypoints-list">
+              <div 
+                v-for="(waypoint, index) in selectedRouteDetail.waypoints" 
+                :key="waypoint.id"
+                class="waypoint-item"
+                :class="{ 
+                  'start-point': index === 0, 
+                  'end-point': index === selectedRouteDetail.waypoints.length - 1 
+                }"
+              >
+                <div class="waypoint-index">
+                  <span v-if="index === 0" class="point-label start">起</span>
+                  <span v-else-if="index === selectedRouteDetail.waypoints.length - 1" class="point-label end">终</span>
+                  <span v-else class="point-label via">{{ index }}</span>
+                </div>
+                <div class="waypoint-info">
+                  <div class="waypoint-name">{{ waypoint.name }}</div>
+                  <div class="waypoint-details">
+                    <span v-if="waypoint.region && waypoint.region !== '暂无'">{{ waypoint.region }}</span>
+                    <span v-if="waypoint.description && waypoint.description !== '暂无'" class="description">{{ waypoint.description }}</span>
+                    <span v-if="waypoint.nearest_waystation_name && waypoint.nearest_waystation_name !== '暂无'" class="nearest-station">
+                      最近驿站: {{ waypoint.nearest_waystation_name }}
+                      <span v-if="waypoint.nearest_waystation_distance">({{ waypoint.nearest_waystation_distance }}km)</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 操作按钮 -->
+          <div class="route-actions">
+            <button 
+              class="action-button view-on-map" 
+              @click="viewRouteOnMap"
+              :disabled="!canShowOnMap"
+            >
+              在地图上查看路线
+            </button>
+            <button 
+              class="action-button close-detail" 
+              @click="closeRouteDetail"
+            >
+              关闭
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
+import { ref, computed } from 'vue'
+import axios from 'axios'
 import { usePopularRoutes } from '@/composables/usePopularRoutes.js'
 
+const API_BASE_URL = 'http://localhost:3000/api/v1'
+
 // 发射事件到父组件
-const emit = defineEmits(['route-selected'])
+const emit = defineEmits(['route-selected', 'route-visualize'])
 
 // 使用热门路线组合式函数
 const { 
@@ -73,11 +176,96 @@ const {
   getRouteDetails 
 } = usePopularRoutes()
 
+// 路线详情弹窗状态
+const showRouteDetail = ref(false)
+const selectedRouteDetail = ref(null)
+const waypointsLoading = ref(false)
+const waypointsError = ref(null)
+
+// 检查是否可以在地图上显示
+const canShowOnMap = computed(() => {
+  return selectedRouteDetail.value?.waypoints?.some(wp => 
+    wp.longitude && wp.latitude && 
+    !isNaN(wp.longitude) && !isNaN(wp.latitude)
+  )
+})
+
 // 处理路线卡片点击
-const handleRouteClick = (route) => {
-  const routeDetails = getRouteDetails(route.id)
-  emit('route-selected', routeDetails)
-  console.log('选择路线:', routeDetails)
+const handleRouteClick = async (route) => {
+  console.log('点击路线:', route)
+  
+  // 显示详情弹窗
+  showRouteDetail.value = true
+  selectedRouteDetail.value = { route: null, waypoints: [] }
+  waypointsLoading.value = true
+  waypointsError.value = null
+  
+  try {
+    // 获取路线途径点详情
+    const response = await axios.get(`${API_BASE_URL}/routes/${route.id}/waypoints`)
+    if (response.data.success) {
+      selectedRouteDetail.value = response.data.data
+      console.log('获取途径点详情成功:', response.data.data)
+    } else {
+      throw new Error(response.data.message || '获取途径点详情失败')
+    }
+  } catch (error) {
+    console.error('获取途径点详情失败:', error)
+    waypointsError.value = error.message || '获取途径点详情失败'
+    // 如果失败，至少显示基本路线信息
+    selectedRouteDetail.value = { 
+      route: {
+        id: route.id,
+        name: route.title,
+        region: route.region,
+        distance_km: parseInt(route.distance),
+        estimated_days: parseInt(route.duration),
+        road_condition: route.roadCondition,
+        remarks: route.remarks,
+        precautions: route.precautions
+      }, 
+      waypoints: [] 
+    }
+  } finally {
+    waypointsLoading.value = false
+  }
+}
+
+// 关闭路线详情
+const closeRouteDetail = () => {
+  showRouteDetail.value = false
+  selectedRouteDetail.value = null
+  waypointsError.value = null
+}
+
+// 在地图上查看路线
+const viewRouteOnMap = () => {
+  if (!canShowOnMap.value) {
+    console.warn('该路线无法在地图上显示，缺少有效的经纬度信息')
+    return
+  }
+  
+  console.log('在地图上显示路线:', selectedRouteDetail.value)
+  
+  // 发射事件到父组件，传递路线可视化数据
+  emit('route-visualize', {
+    route: selectedRouteDetail.value.route,
+    waypoints: selectedRouteDetail.value.waypoints
+  })
+  
+  // 同时发射原有的route-selected事件保持兼容性
+  emit('route-selected', {
+    id: selectedRouteDetail.value.route.id,
+    title: selectedRouteDetail.value.route.name,
+    region: selectedRouteDetail.value.route.region,
+    distance: selectedRouteDetail.value.route.distance_km ? `${selectedRouteDetail.value.route.distance_km}km` : '未知',
+    duration: selectedRouteDetail.value.route.estimated_days ? `${selectedRouteDetail.value.route.estimated_days}天` : '未知',
+    roadCondition: selectedRouteDetail.value.route.road_condition,
+    waypoints: selectedRouteDetail.value.waypoints
+  })
+  
+  // 关闭弹窗
+  closeRouteDetail()
 }
 
 // 暴露给父组件的数据
@@ -218,6 +406,263 @@ defineExpose({
   color: #f44336;
 }
 
+/* 路线详情弹窗样式 */
+.route-detail-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.route-detail-content {
+  background: white;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 800px;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  animation: modalShow 0.3s ease;
+}
+
+@keyframes modalShow {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.route-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e9ecef;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+.route-detail-header h3 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #6c757d;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.close-button:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: #dc3545;
+}
+
+.route-detail-body {
+  padding: 24px;
+  max-height: calc(80vh - 80px);
+  overflow-y: auto;
+}
+
+/* 路线基本信息 */
+.route-basic-info {
+  margin-bottom: 24px;
+}
+
+.info-item {
+  display: flex;
+  margin-bottom: 12px;
+  align-items: flex-start;
+}
+
+.info-item .label {
+  font-weight: 600;
+  color: #495057;
+  min-width: 80px;
+  margin-right: 12px;
+}
+
+.info-item .value {
+  color: #2c3e50;
+  flex: 1;
+  line-height: 1.5;
+}
+
+/* 途径点部分 */
+.waypoints-section {
+  margin-bottom: 24px;
+}
+
+.waypoints-section h4 {
+  margin: 0 0 16px 0;
+  color: #2c3e50;
+  font-size: 16px;
+  font-weight: 600;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #4CAF50;
+}
+
+.waypoints-loading,
+.waypoints-error,
+.waypoints-empty {
+  text-align: center;
+  padding: 20px;
+  color: #6c757d;
+}
+
+.waypoints-error {
+  color: #dc3545;
+}
+
+.waypoints-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.waypoint-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #6c757d;
+  transition: all 0.2s ease;
+}
+
+.waypoint-item.start-point {
+  border-left-color: #28a745;
+  background: linear-gradient(135deg, #e8f5e9 0%, #f8f9fa 100%);
+}
+
+.waypoint-item.end-point {
+  border-left-color: #dc3545;
+  background: linear-gradient(135deg, #ffebee 0%, #f8f9fa 100%);
+}
+
+.waypoint-index {
+  margin-right: 16px;
+  flex-shrink: 0;
+}
+
+.point-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-weight: 600;
+  font-size: 14px;
+  color: white;
+}
+
+.point-label.start {
+  background: #28a745;
+}
+
+.point-label.end {
+  background: #dc3545;
+}
+
+.point-label.via {
+  background: #6c757d;
+}
+
+.waypoint-info {
+  flex: 1;
+}
+
+.waypoint-name {
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+
+.waypoint-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  color: #6c757d;
+}
+
+.waypoint-details span {
+  line-height: 1.4;
+}
+
+.waypoint-details .description {
+  color: #495057;
+  font-style: italic;
+}
+
+.waypoint-details .nearest-station {
+  color: #28a745;
+  font-weight: 500;
+}
+
+/* 操作按钮 */
+.route-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding-top: 16px;
+  border-top: 1px solid #e9ecef;
+}
+
+.action-button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+}
+
+.action-button.view-on-map {
+  background: #4CAF50;
+  color: white;
+}
+
+.action-button.view-on-map:hover:not(:disabled) {
+  background: #45a049;
+  transform: translateY(-1px);
+}
+
+.action-button.view-on-map:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.action-button.close-detail {
+  background: #6c757d;
+  color: white;
+}
+
+.action-button.close-detail:hover {
+  background: #5a6268;
+  transform: translateY(-1px);
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .route-card-header {
@@ -228,6 +673,37 @@ defineExpose({
   .route-card-stats {
     flex-direction: column;
     gap: 8px;
+  }
+  
+  .route-detail-content {
+    width: 95%;
+    max-height: 90vh;
+  }
+  
+  .route-detail-header {
+    padding: 16px 20px;
+  }
+  
+  .route-detail-body {
+    padding: 20px;
+  }
+  
+  .waypoint-item {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .waypoint-index {
+    margin-right: 0;
+    align-self: flex-start;
+  }
+  
+  .route-actions {
+    flex-direction: column;
+  }
+  
+  .action-button {
+    width: 100%;
   }
 }
 </style>

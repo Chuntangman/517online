@@ -484,6 +484,56 @@ class RouteController {
       });
     }
   }
+
+  /**
+   * 获取路线的途径点详情
+   * GET /api/v1/routes/:id/waypoints
+   */
+  static async getRouteWaypoints(req, res) {
+    try {
+      // 参数验证
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: '参数验证失败',
+          errors: errors.array()
+        });
+      }
+      
+      const { id } = req.params;
+      
+      // 获取路线信息
+      const route = await RouteModel.getRouteById(parseInt(id));
+      
+      if (!route) {
+        return res.status(404).json({
+          success: false,
+          message: '路线不存在'
+        });
+      }
+      
+      // 获取途径点详情
+      const waypoints = await RouteModel.getRouteWaypointsDetails(parseInt(id));
+      
+      res.status(200).json({
+        success: true,
+        message: '获取路线途径点成功',
+        data: {
+          route: route,
+          waypoints: waypoints
+        }
+      });
+      
+    } catch (error) {
+      console.error('获取路线途径点失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '获取路线途径点失败',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
 }
 
 module.exports = RouteController;

@@ -421,6 +421,74 @@ class RouteModel {
       throw new Error('获取热门路线失败');
     }
   }
+
+  /**
+   * 获取路线的途径点详情
+   * @param {number} routeId - 路线 ID
+   * @returns {Promise<Array>} 途径点详情列表（按顺序排列）
+   */
+  static async getRouteWaypointsDetails(routeId) {
+    try {
+      // 首先获取路线信息和途径地点ID数组
+      const routeResult = await query(
+        'SELECT "途径地点id" as waypoint_ids FROM "public"."routetable" WHERE "id" = $1',
+        [routeId]
+      );
+      
+      if (!routeResult.rows[0] || !routeResult.rows[0].waypoint_ids) {
+        return [];
+      }
+      
+      const waypointIds = routeResult.rows[0].waypoint_ids;
+      
+      if (!Array.isArray(waypointIds) || waypointIds.length === 0) {
+        return [];
+      }
+      
+      // 使用 ANY 查询获取所有相关的目标点
+      const sql = `
+        SELECT 
+          "ID" as id,
+          "目标点名称" as name,
+          "地区" as region,
+          "longitude",
+          "latitude",
+          "介绍" as description,
+          "最近驿站名称" as nearest_waystation_name,
+          "最近驿站距离（km）" as nearest_waystation_distance,
+          "热门途径线路id" as popular_route_id,
+          "热门途径线路名称" as popular_route_name
+        FROM "public"."Destination"
+        WHERE "ID" = ANY($1::int[])
+      `;
+      
+      const result = await query(sql, [waypointIds]);
+      const destinations = result.rows;
+      
+      // 按照原始路线中的顺序排列途径点
+      const orderedWaypoints = waypointIds.map(id => {
+        const destination = destinations.find(d => d.id === id);
+        return destination || {
+          id: id,
+          name: '暂无',
+          region: '暂无',
+          longitude: null,
+          latitude: null,
+          description: '暂无',
+          nearest_waystation_name: '暂无',
+          nearest_waystation_distance: null,
+          popular_route_id: null,
+          popular_route_name: '暂无'
+        };
+      });
+      
+      return orderedWaypoints;
+      
+    } catch (error) {
+      console.error('获取路线途径点详情失败:', error);
+      throw new Error('获取路线途径点详情失败');
+    }
+  }
 }
 
 module.exports = RouteModel;

@@ -40,6 +40,7 @@
           <PopularRoutes 
             v-show="activeTab === '热门路线'"
             @route-selected="handleRouteSelected"
+            @route-visualize="handleRouteVisualize"
           />
 
           <!-- 驿站服务展示 -->
@@ -111,10 +112,18 @@ const handleTabChanged = (tab) => {
     let filteredData = null
     if (tab === '驿站服务') {
       filteredData = currentFilteredWaystations.value
+      // 如果当前有路线显示，使用专门的方法添加驿站（与路线共存）
+      if (mapRef.value.hasActiveRoute()) {
+        mapRef.value.addWaystationsToRoute(filteredData)
+      } else {
+        mapRef.value.switchMapMode(tab, filteredData)
+      }
     } else if (tab === '常用地点') {
       filteredData = currentFilteredDestinations.value
+      mapRef.value.switchMapMode(tab, filteredData)
+    } else {
+      mapRef.value.switchMapMode(tab, filteredData)
     }
-    mapRef.value.switchMapMode(tab, filteredData)
   }
 }
 
@@ -131,10 +140,18 @@ const handleSubNavClick = (subItem) => {
     let filteredData = null
     if (subItem === '驿站服务') {
       filteredData = currentFilteredWaystations.value
+      // 如果当前有路线显示，使用专门的方法添加驿站（与路线共存）
+      if (mapRef.value.hasActiveRoute()) {
+        mapRef.value.addWaystationsToRoute(filteredData)
+      } else {
+        mapRef.value.switchMapMode(subItem, filteredData)
+      }
     } else if (subItem === '常用地点') {
       filteredData = currentFilteredDestinations.value
+      mapRef.value.switchMapMode(subItem, filteredData)
+    } else {
+      mapRef.value.switchMapMode(subItem, filteredData)
     }
-    mapRef.value.switchMapMode(subItem, filteredData)
   }
 }
 
@@ -158,6 +175,47 @@ const handleEndPointChanged = (endPoint) => {
 const handleRouteSelected = (route) => {
   console.log('选择路线:', route)
   // 这里可以添加路线选择后的处理逻辑
+}
+
+// 处理路线可视化
+const handleRouteVisualize = (routeData) => {
+  console.log('开始可视化路线:', routeData)
+  
+  if (!mapRef.value) {
+    console.error('地图引用不存在，无法可视化路线')
+    return
+  }
+  
+  if (!routeData.waypoints || routeData.waypoints.length < 2) {
+    console.warn('路线途径点不足，无法可视化')
+    return
+  }
+  
+  try {
+    // 在显示路线前，先切换到热门路线模式（清除驿站和目标点标记）
+    if (mapRef.value) {
+      mapRef.value.switchMapMode('热门路线')
+    }
+    
+    // 调用地图组件的绘制路线功能
+    const success = mapRef.value.drawRouteCurve(routeData.waypoints)
+    
+    if (success) {
+      console.log('路线可视化成功')
+      
+      // 更新天气位置到路线起点
+      const startPoint = routeData.waypoints[0]
+      if (startPoint && startPoint.longitude && startPoint.latitude) {
+        updateWeatherLocation(startPoint.longitude, startPoint.latitude)
+        console.log('已更新天气位置到路线起点:', startPoint.name)
+      }
+    } else {
+      console.error('路线可视化失败')
+    }
+    
+  } catch (error) {
+    console.error('路线可视化过程中发生错误:', error)
+  }
 }
 
 // 处理驿站选择

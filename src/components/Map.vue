@@ -56,6 +56,10 @@ const isMapInitialized = ref(false)
 const resizeObserver = ref(null)
 // 全局AMap实例缓存
 let globalAMapInstance = null
+// 当前路线曲线实例
+const currentRouteCurve = ref(null)
+// 当前路线标记点数组
+const currentRouteMarkers = ref([])
 
 // 跳转到指定位置
 const jumpToLocation = (longitude, latitude, markerType = 'waystation') => {
@@ -916,7 +920,7 @@ const switchMapMode = (mode, filteredData = null) => {
   console.log('切换地图显示模式:', mode, '筛选数据长度:', filteredData?.length)
   
   if (mode === '驿站服务') {
-    // 显示驿站标记，隐藏目标点标记
+    // 显示驿站标记，保留已有的路线（如果有的话）
     if (filteredData) {
       updateMarkers(filteredData)
     } else {
@@ -924,7 +928,7 @@ const switchMapMode = (mode, filteredData = null) => {
     }
     clearDestinationMarkers()
   } else if (mode === '常用地点') {
-    // 显示目标点标记，隐藏驿站标记
+    // 显示目标点标记，清除驿站标记，保留路线
     if (filteredData) {
       updateDestinationMarkers(filteredData)
     } else {
@@ -933,10 +937,344 @@ const switchMapMode = (mode, filteredData = null) => {
     // 清除驿站标记
     markers.value.forEach(marker => marker.setMap(null))
     markers.value = []
+  } else if (mode === '热门路线') {
+    // 热门路线模式：清除驿站和目标点标记，只显示路线
+    markers.value.forEach(marker => marker.setMap(null))
+    markers.value = []
+    clearDestinationMarkers()
+    // 注意：不清除路线曲线和路线标记，让用户可以继续查看路线
   } else {
-    // 默认显示驿站标记
+    // 其他模式默认显示驿站标记
     addMarkersToMap()
     clearDestinationMarkers()
+  }
+}
+
+// 绘制路线贝塞尔曲线
+const drawRouteCurve = (waypoints) => {
+  if (!mapInstance.value || !waypoints || waypoints.length < 2) {
+    console.warn('无法绘制路线：地图未初始化或途径点不足')
+    return false
+  }
+
+  // 清除现有路线
+  clearRouteCurve()
+
+  try {
+    // 过滤出有效的经纬度点
+    const validPoints = waypoints.filter(wp => 
+      wp.longitude && wp.latitude && 
+      !isNaN(wp.longitude) && !isNaN(wp.latitude)
+    )
+
+    if (validPoints.length < 2) {
+      console.warn('有效途径点不足，无法绘制路线')
+      return false
+    }
+
+    console.log('开始绘制路线，有效途径点数量:', validPoints.length)
+
+    // 构建贝塞尔曲线路径
+    const path = buildBezierPath(validPoints)
+
+    // 创建贝塞尔曲线
+    const bezierCurve = new AMap.BezierCurve({
+      path: path,
+      strokeWeight: 6,           // 线条宽度
+      strokeColor: "#4CAF50",    // 线条颜色（绿色）
+      isOutline: true,           // 显示描边
+      outlineColor: "#ffffff",   // 描边颜色（白色）
+      borderWeight: 2,           // 描边宽度
+      strokeOpacity: 0.8,        // 线条透明度
+      strokeStyle: "solid"       // 线条样式
+    })
+
+    // 将曲线添加到地图
+    mapInstance.value.add(bezierCurve)
+    currentRouteCurve.value = bezierCurve
+
+    // 调整地图视角以显示完整路线
+    adjustMapViewForRoute(validPoints)
+
+    // 添加途径点标记
+    addRouteWaypointMarkers(validPoints)
+
+    console.log('路线曲线绘制成功')
+    return true
+
+  } catch (error) {
+    console.error('绘制路线曲线失败:', error)
+    return false
+  }
+}
+
+// 构建贝塞尔曲线路径
+const buildBezierPath = (points) => {
+  if (points.length === 2) {
+    // 两点之间的简单路径，添加轻微弧度
+    const startPoint = [points[0].longitude, points[0].latitude]
+    const endPoint = [points[1].longitude, points[1].latitude]
+    
+    // 计算中点并添加轻微偏移作为控制点
+    const midPoint = [
+      (startPoint[0] + endPoint[0]) / 2,
+      (startPoint[1] + endPoint[1]) / 2
+    ]
+    
+    // 添加垂直于连线的轻微偏移（很小的弧度）
+    const dx = endPoint[0] - startPoint[0]
+    const dy = endPoint[1] - startPoint[1]
+    const distance = Math.sqrt(dx * dx + dy * dy)
+    
+    // 控制弧度大小，距离越远弧度越明显，但总体保持很小
+    const arcFactor = Math.min(distance * 0.1, 0.005) // 最大0.005度的偏移
+    
+    const controlPoint = [
+      midPoint[0] + dy * arcFactor, // 垂直方向的偏移
+      midPoint[1] - dx * arcFactor
+    ]
+    
+    return [
+      [startPoint],
+      [controlPoint, endPoint]
+    ]
+  }
+
+  const path = []
+
+  for (let i = 0; i < points.length; i++) {
+    const currentPoint = [points[i].longitude, points[i].latitude]
+
+    if (i === 0) {
+      // 起点
+      path.push([currentPoint])
+    } else if (i === points.length - 1) {
+      // 终点，使用很轻微的控制点
+      const prevPoint = [points[i - 1].longitude, points[i - 1].latitude]
+      const controlPoint = [
+        prevPoint[0] + (currentPoint[0] - prevPoint[0]) * 0.8, // 减少控制点距离
+        prevPoint[1] + (currentPoint[1] - prevPoint[1]) * 0.8
+      ]
+      path.push([controlPoint, currentPoint])
+    } else {
+      // 中间点，使用更温和的控制点算法
+      const prevPoint = [points[i - 1].longitude, points[i - 1].latitude]
+      const nextPoint = [points[i + 1].longitude, points[i + 1].latitude]
+      
+      // 使用更小的控制点偏移，减少弧度
+      const factor1 = 0.9 // 前控制点更接近前一个点
+      const factor2 = 0.1 // 后控制点更接近当前点
+      
+      const controlPoint1 = [
+        prevPoint[0] + (currentPoint[0] - prevPoint[0]) * factor1,
+        prevPoint[1] + (currentPoint[1] - prevPoint[1]) * factor1
+      ]
+      const controlPoint2 = [
+        currentPoint[0] + (nextPoint[0] - currentPoint[0]) * factor2,
+        currentPoint[1] + (nextPoint[1] - currentPoint[1]) * factor2
+      ]
+      
+      path.push([controlPoint1, controlPoint2, currentPoint])
+    }
+  }
+
+  return path
+}
+
+// 调整地图视角以显示完整路线
+const adjustMapViewForRoute = (points) => {
+  if (!mapInstance.value || !points || points.length === 0) return
+
+  try {
+    // 计算边界
+    let minLng = points[0].longitude
+    let maxLng = points[0].longitude
+    let minLat = points[0].latitude
+    let maxLat = points[0].latitude
+
+    points.forEach(point => {
+      minLng = Math.min(minLng, point.longitude)
+      maxLng = Math.max(maxLng, point.longitude)
+      minLat = Math.min(minLat, point.latitude)
+      maxLat = Math.max(maxLat, point.latitude)
+    })
+
+    // 添加边距
+    const padding = 0.01 // 约1km的边距
+    minLng -= padding
+    maxLng += padding
+    minLat -= padding
+    maxLat += padding
+
+    // 创建边界
+    const bounds = new AMap.Bounds([minLng, minLat], [maxLng, maxLat])
+    
+    // 调整地图视角
+    mapInstance.value.setBounds(bounds, false, [20, 20, 20, 20])
+
+    console.log('地图视角已调整以显示完整路线')
+  } catch (error) {
+    console.error('调整地图视角失败:', error)
+  }
+}
+
+// 添加路线途径点标记
+const addRouteWaypointMarkers = (points) => {
+  if (!mapInstance.value || !points) return
+
+  points.forEach((point, index) => {
+    const position = new AMap.LngLat(point.longitude, point.latitude)
+    
+    // 根据位置确定标记样式，使用常用地点风格
+    let markerContent
+    if (index === 0) {
+      // 起点 - 使用绿色地点标记风格
+      markerContent = `
+        <div class="destination-route-marker start-point">
+          <div class="marker-pin">
+            <div class="marker-icon">🏁</div>
+          </div>
+          <div class="marker-label">起点</div>
+        </div>
+      `
+    } else if (index === points.length - 1) {
+      // 终点 - 使用红色地点标记风格
+      markerContent = `
+        <div class="destination-route-marker end-point">
+          <div class="marker-pin">
+            <div class="marker-icon">🏆</div>
+          </div>
+          <div class="marker-label">终点</div>
+        </div>
+      `
+    } else {
+      // 途径点 - 使用蓝色地点标记风格
+      markerContent = `
+        <div class="destination-route-marker way-point">
+          <div class="marker-pin">
+            <div class="marker-icon">📍</div>
+          </div>
+          <div class="marker-label">${point.name.length > 6 ? point.name.substring(0, 6) + '...' : point.name}</div>
+        </div>
+      `
+    }
+
+    const marker = new AMap.Marker({
+      position: position,
+      content: markerContent,
+      offset: new AMap.Pixel(-20, -50) // 调整偏移量以适应新的标记样式
+    })
+
+    // 添加点击事件显示详情
+    marker.on('click', () => {
+      showRouteWaypointInfo(marker, point, index, points.length)
+    })
+
+    marker.setMap(mapInstance.value)
+    // 将标记点保存到路线标记数组中
+    currentRouteMarkers.value.push(marker)
+  })
+}
+
+// 显示路线途径点信息（常用地点风格）
+const showRouteWaypointInfo = (marker, point, index, totalPoints) => {
+  if (!infoWindow.value) {
+    infoWindow.value = new AMap.InfoWindow({
+      offset: new AMap.Pixel(0, -50),
+      closeWhenClickMap: true
+    })
+  }
+
+  let pointType = '途径点'
+  let typeIcon = '📍'
+  let typeColor = '#1976d2'
+  
+  if (index === 0) {
+    pointType = '起点'
+    typeIcon = '🏁'
+    typeColor = '#4CAF50'
+  } else if (index === totalPoints - 1) {
+    pointType = '终点'
+    typeIcon = '🏆'
+    typeColor = '#f44336'
+  }
+  
+  const content = `
+    <div class="destination-info-window">
+      <div class="info-header">
+        <span class="point-type-icon">${typeIcon}</span>
+        <div class="header-text">
+          <h3>${point.name}</h3>
+          <span class="point-type-badge" style="background-color: ${typeColor}">${pointType}</span>
+        </div>
+      </div>
+      
+      <div class="info-content">
+        <div class="info-section">
+          <div class="info-item">
+            <span class="info-label">🌍 地区</span>
+            <span class="info-value">${point.region || '待补充'}</span>
+          </div>
+          
+          ${point.description && point.description !== '暂无' ? 
+            `<div class="info-item">
+              <span class="info-label">📝 介绍</span>
+              <span class="info-value description-text">${point.description}</span>
+            </div>` : ''
+          }
+          
+          ${point.longitude && point.latitude ? 
+            `<div class="info-item">
+              <span class="info-label">📍 坐标</span>
+              <span class="info-value coordinates">${point.longitude}, ${point.latitude}</span>
+            </div>` : ''
+          }
+          
+          ${point.nearest_waystation_name && point.nearest_waystation_name !== '暂无' ? 
+            `<div class="info-item">
+              <span class="info-label">🏨 最近驿站</span>
+              <span class="info-value">${point.nearest_waystation_name}
+               ${point.nearest_waystation_distance ? `<span class="distance">(${point.nearest_waystation_distance}km)</span>` : ''}</span>
+            </div>` : ''
+          }
+          
+          ${point.popular_route_name && point.popular_route_name !== '暂无' ? 
+            `<div class="info-item">
+              <span class="info-label">🚴 热门线路</span>
+              <span class="info-value">${point.popular_route_name}</span>
+            </div>` : ''
+          }
+        </div>
+        
+        <div class="info-actions">
+          <button class="info-action-btn" onclick="window.openDestinationDetail && window.openDestinationDetail(${point.id})">
+            查看详情
+          </button>
+        </div>
+      </div>
+    </div>
+  `
+  
+  infoWindow.value.setContent(content)
+  infoWindow.value.open(mapInstance.value, marker.getPosition())
+}
+
+// 清除路线曲线和相关标记
+const clearRouteCurve = () => {
+  // 清除路线曲线
+  if (currentRouteCurve.value && mapInstance.value) {
+    mapInstance.value.remove(currentRouteCurve.value)
+    currentRouteCurve.value = null
+    console.log('已清除路线曲线')
+  }
+  
+  // 清除路线标记点
+  if (currentRouteMarkers.value.length > 0 && mapInstance.value) {
+    currentRouteMarkers.value.forEach(marker => {
+      marker.setMap(null)
+    })
+    currentRouteMarkers.value = []
+    console.log('已清除路线标记点')
   }
 }
 
@@ -1022,6 +1360,21 @@ onUnmounted(() => {
   // 注意：不清理 globalAMapInstance，让其他组件实例可以复用
 })
 
+// 检查是否有活动路线
+const hasActiveRoute = () => {
+  return currentRouteCurve.value !== null
+}
+
+// 添加驿站标记（与现有路线共存）
+const addWaystationsToRoute = (filteredData = null) => {
+  console.log('添加驿站标记到现有路线')
+  if (filteredData) {
+    updateMarkers(filteredData)
+  } else {
+    addMarkersToMap()
+  }
+}
+
 // 暴露方法给父组件
 defineExpose({
   jumpToLocation,
@@ -1031,7 +1384,11 @@ defineExpose({
   isMapInitialized,
   switchMapMode,
   addDestinationMarkersToMap,
-  clearDestinationMarkers
+  clearDestinationMarkers,
+  drawRouteCurve,
+  clearRouteCurve,
+  addWaystationsToRoute,
+  hasActiveRoute
 })
 </script>
 
@@ -1279,16 +1636,240 @@ defineExpose({
   box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
 }
 
-/* 信息窗体样式 */
-:deep(.amap-info-content) {
-  padding: 15px;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-  max-width: 300px;
+/* 常用地点风格的路线标记 */
+.destination-route-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 300;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.3s ease;
 }
 
+.destination-route-marker:hover {
+  transform: translateY(-2px);
+}
+
+.marker-pin {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  border: 3px solid #ffffff;
+  margin-bottom: 8px;
+}
+
+.marker-pin::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: inherit;
+  border-radius: 50%;
+  bottom: -4px;
+  right: -4px;
+  box-shadow: inherit;
+}
+
+.destination-route-marker.start-point .marker-pin {
+  background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);
+}
+
+.destination-route-marker.end-point .marker-pin {
+  background: linear-gradient(135deg, #f44336 0%, #EF5350 100%);
+}
+
+.destination-route-marker.way-point .marker-pin {
+  background: linear-gradient(135deg, #2196F3 0%, #42A5F5 100%);
+}
+
+.marker-icon {
+  transform: rotate(45deg);
+  font-size: 18px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
+.marker-label {
+  background: rgba(255, 255, 255, 0.95);
+  color: #333;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.destination-route-marker.start-point .marker-label {
+  color: #4CAF50;
+}
+
+.destination-route-marker.end-point .marker-label {
+  color: #f44336;
+}
+
+.destination-route-marker.way-point .marker-label {
+  color: #2196F3;
+}
+
+/* 信息窗体样式 */
+:deep(.amap-info-content) {
+  padding: 0;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  max-width: 350px;
+  overflow: hidden;
+}
+
+/* 常用地点风格的信息窗口 */
+.destination-info-window {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.info-header {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.point-type-icon {
+  font-size: 24px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+}
+
+.header-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.header-text h3 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.point-type-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 12px;
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.info-content {
+  padding: 16px 20px;
+}
+
+.info-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f8f9fa;
+}
+
+.info-item:last-child {
+  border-bottom: none;
+}
+
+.info-label {
+  font-size: 14px;
+  min-width: 80px;
+  color: #6c757d;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.info-value {
+  flex: 1;
+  color: #2c3e50;
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.description-text {
+  font-style: italic;
+  color: #495057;
+}
+
+.coordinates {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  background: #f8f9fa;
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: #6c757d;
+}
+
+.distance {
+  color: #28a745;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.info-actions {
+  padding-top: 12px;
+  border-top: 1px solid #e9ecef;
+  display: flex;
+  justify-content: center;
+}
+
+.info-action-btn {
+  background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.2);
+}
+
+.info-action-btn:hover {
+  background: linear-gradient(135deg, #45a049 0%, #5cb85c 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+/* 保留原有简单信息窗口的样式 */
 .info-window {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  padding: 15px;
 }
 
 .info-window h3 {
