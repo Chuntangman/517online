@@ -144,6 +144,16 @@
               在地图上查看路线
             </button>
             <button 
+              class="action-button trajectory-playback" 
+              @click="startTrajectoryPlayback"
+              :disabled="!canPlayTrajectory"
+            >
+              <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <polygon points="5,3 19,12 5,21"/>
+              </svg>
+              轨迹回放
+            </button>
+            <button 
               class="action-button close-detail" 
               @click="closeRouteDetail"
             >
@@ -164,7 +174,7 @@ import { usePopularRoutes } from '@/composables/usePopularRoutes.js'
 const API_BASE_URL = 'http://localhost:3000/api/v1'
 
 // 发射事件到父组件
-const emit = defineEmits(['route-selected', 'route-visualize'])
+const emit = defineEmits(['route-selected', 'route-visualize', 'trajectory-playback'])
 
 // 使用热门路线组合式函数
 const { 
@@ -188,6 +198,25 @@ const canShowOnMap = computed(() => {
     wp.longitude && wp.latitude && 
     !isNaN(wp.longitude) && !isNaN(wp.latitude)
   )
+})
+
+// 检查是否可以进行轨迹回放
+const canPlayTrajectory = computed(() => {
+  const waypoints = selectedRouteDetail.value?.waypoints
+  if (!waypoints || waypoints.length < 2) {
+    return false
+  }
+  
+  // 检查是否有足够的有效经纬度点 - 使用宽松验证
+  const validPoints = waypoints.filter(wp => {
+    const hasLng = wp.longitude !== null && wp.longitude !== undefined && wp.longitude !== '';
+    const hasLat = wp.latitude !== null && wp.latitude !== undefined && wp.latitude !== '';
+    const validLng = hasLng && !isNaN(parseFloat(wp.longitude));
+    const validLat = hasLat && !isNaN(parseFloat(wp.latitude));
+    return validLng && validLat;
+  })
+  
+  return validPoints.length >= 2
 })
 
 // 处理路线卡片点击
@@ -263,6 +292,87 @@ const viewRouteOnMap = () => {
     roadCondition: selectedRouteDetail.value.route.road_condition,
     waypoints: selectedRouteDetail.value.waypoints
   })
+  
+  // 关闭弹窗
+  closeRouteDetail()
+}
+
+// 开始轨迹回放
+const startTrajectoryPlayback = () => {
+  console.log('=== 开始轨迹回放调试 ===')
+  console.log('selectedRouteDetail.value:', selectedRouteDetail.value)
+  
+  if (!selectedRouteDetail.value) {
+    console.error('路线详情数据为空')
+    return
+  }
+  
+  if (!selectedRouteDetail.value.waypoints) {
+    console.error('路线途径点数据为空')
+    return
+  }
+  
+  console.log('原始途径点数据:', selectedRouteDetail.value.waypoints)
+  console.log('途径点数量:', selectedRouteDetail.value.waypoints.length)
+  
+  // 详细分析每个途径点
+  selectedRouteDetail.value.waypoints.forEach((wp, index) => {
+    console.log(`途径点 ${index + 1}:`, {
+      name: wp.name,
+      longitude: wp.longitude,
+      latitude: wp.latitude,
+      longitudeType: typeof wp.longitude,
+      latitudeType: typeof wp.latitude,
+      longitudeValid: wp.longitude !== null && wp.longitude !== undefined && !isNaN(wp.longitude),
+      latitudeValid: wp.latitude !== null && wp.latitude !== undefined && !isNaN(wp.latitude)
+    })
+  })
+  
+  // 提取有效的轨迹点 - 放宽条件，只要不是null和undefined就尝试转换
+  const validWaypoints = selectedRouteDetail.value.waypoints.filter(wp => {
+    const hasLng = wp.longitude !== null && wp.longitude !== undefined && wp.longitude !== '';
+    const hasLat = wp.latitude !== null && wp.latitude !== undefined && wp.latitude !== '';
+    const validLng = hasLng && !isNaN(parseFloat(wp.longitude));
+    const validLat = hasLat && !isNaN(parseFloat(wp.latitude));
+    
+    console.log(`途径点 ${wp.name} 验证:`, {
+      hasLng, hasLat, validLng, validLat,
+      longitude: wp.longitude, latitude: wp.latitude
+    })
+    
+    return validLng && validLat;
+  })
+  
+  console.log('有效途径点数量:', validWaypoints.length)
+  console.log('有效途径点:', validWaypoints)
+  
+  if (validWaypoints.length < 2) {
+    console.error('有效途径点不足，无法进行轨迹回放。需要至少2个点，当前有效点数:', validWaypoints.length)
+    alert(`轨迹回放失败：有效途径点不足（需要至少2个，当前${validWaypoints.length}个）`)
+    return
+  }
+  
+  // 转换为轨迹回放需要的格式 [[经度, 纬度], [经度, 纬度], ...]
+  const trajectoryPath = validWaypoints.map(wp => {
+    const lng = parseFloat(wp.longitude);
+    const lat = parseFloat(wp.latitude);
+    console.log(`转换途径点 ${wp.name}: [${lng}, ${lat}]`)
+    return [lng, lat];
+  })
+  
+  console.log('最终轨迹路径:', trajectoryPath)
+  
+  // 发射轨迹回放事件到父组件
+  const trajectoryData = {
+    route: selectedRouteDetail.value.route,
+    waypoints: selectedRouteDetail.value.waypoints,
+    trajectoryPath: trajectoryPath,
+    name: selectedRouteDetail.value.route.name || '热门路线轨迹'
+  }
+  
+  console.log('发射轨迹回放事件:', trajectoryData)
+  
+  emit('trajectory-playback', trajectoryData)
   
   // 关闭弹窗
   closeRouteDetail()
@@ -651,6 +761,30 @@ defineExpose({
 .action-button.view-on-map:disabled {
   background: #ccc;
   cursor: not-allowed;
+}
+
+.action-button.trajectory-playback {
+  background: #ff6b6b;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.action-button.trajectory-playback:hover:not(:disabled) {
+  background: #ee5a52;
+  transform: translateY(-1px);
+}
+
+.action-button.trajectory-playback:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.action-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
 }
 
 .action-button.close-detail {

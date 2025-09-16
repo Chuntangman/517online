@@ -1,0 +1,22 @@
+{
+	"contentrating" : "Everyone",
+	"file" : "f2fbe0aaa58cf7c74350f0fe5dda2b9e.mp4",
+	"general" : 
+	{
+		"properties" : 
+		{
+			"schemecolor" : 
+			{
+				"order" : 0,
+				"text" : "ui_browse_properties_scheme_color",
+				"type" : "color",
+				"value" : "0.64314 0.72941 0.80392"
+			}
+		}
+	},
+	"preview" : "preview.jpg",
+	"tags" : [ "Sports" ],
+	"title" : "骑行",
+	"type" : "video",
+	"version" : 0
+}

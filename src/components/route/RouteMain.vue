@@ -41,6 +41,7 @@
             v-show="activeTab === '热门路线'"
             @route-selected="handleRouteSelected"
             @route-visualize="handleRouteVisualize"
+            @trajectory-playback="handleTrajectoryPlayback"
           />
 
           <!-- 驿站服务展示 -->
@@ -215,6 +216,45 @@ const handleRouteVisualize = (routeData) => {
     
   } catch (error) {
     console.error('路线可视化过程中发生错误:', error)
+  }
+}
+
+// 处理轨迹回放
+const handleTrajectoryPlayback = (trajectoryData) => {
+  console.log('=== RouteMain 处理轨迹回放 ===')
+  console.log('接收到轨迹数据:', trajectoryData)
+  
+  if (!mapRef.value) {
+    console.error('地图引用未准备就绪')
+    return
+  }
+  
+  try {
+    const { trajectoryPath, name } = trajectoryData
+    
+    if (!trajectoryPath || trajectoryPath.length < 2) {
+      console.error('轨迹数据不足，无法进行回放。轨迹点数量:', trajectoryPath?.length || 0)
+      alert('轨迹数据不足，无法进行回放')
+      return
+    }
+    
+    console.log('开始轨迹回放，轨迹点数量:', trajectoryPath.length)
+    console.log('轨迹名称:', name)
+    console.log('轨迹路径详情:', trajectoryPath)
+    
+    // 直接调用地图的轨迹回放方法，不显示控制面板
+    if (mapRef.value.directTrajectoryPlayback) {
+      mapRef.value.directTrajectoryPlayback(trajectoryPath, name)
+    } else {
+      console.error('directTrajectoryPlayback 方法不存在')
+      alert('轨迹回放功能不可用')
+    }
+    
+    console.log('轨迹回放启动流程完成')
+    
+  } catch (error) {
+    console.error('轨迹回放失败:', error)
+    alert('轨迹回放失败: ' + error.message)
   }
 }
 

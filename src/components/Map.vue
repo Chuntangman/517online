@@ -15,6 +15,22 @@
       </svg>
       <span class="mode-text">{{ mapMode === '2D' ? '3D' : '2D' }}</span>
     </div>
+
+    <!-- 骑行导航切换按钮 - 左上角第二个 -->
+    <div class="navigation-toggle-button" @click="toggleNavigation" :title="showNavigation ? '关闭骑行导航' : '开启骑行导航'">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7z"/>
+      </svg>
+      <span class="nav-text">导航</span>
+    </div>
+
+    <!-- 轨迹回放切换按钮 - 左上角第三个 -->
+    <div class="trajectory-toggle-button" @click="toggleTrajectory" :title="showTrajectory ? '关闭轨迹回放' : '开启轨迹回放'">
+      <svg class="trajectory-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <polygon points="5,3 19,12 5,21"/>
+      </svg>
+      <span class="trajectory-text">轨迹</span>
+    </div>
     
     <!-- 地图样式选择器 - 右上角 -->
     <div class="map-controls">
@@ -37,12 +53,38 @@
     </div>
     
     <div id="container"></div>
+
+    <!-- 骑行导航组件 -->
+    <CyclingNavigation 
+      v-if="showNavigation"
+      :map-instance="mapInstance"
+      :visible="showNavigation"
+      @route-planned="handleRoutePlanned"
+      @route-cleared="handleRouteCleared"
+      @step-highlighted="handleStepHighlighted"
+      ref="cyclingNavigationRef"
+    />
+
+    <!-- 轨迹回放组件 -->
+    <TrajectoryPlayback
+      v-if="showTrajectory"
+      :map-instance="mapInstance"
+      :visible="showTrajectory"
+      @trajectory-loaded="handleTrajectoryLoaded"
+      @playback-started="handlePlaybackStarted"
+      @playback-paused="handlePlaybackPaused"
+      @playback-stopped="handlePlaybackStopped"
+      @playback-completed="handlePlaybackCompleted"
+      ref="trajectoryPlaybackRef"
+    />
   </div>
 </template>
 
 <script setup>
 import { onMounted, onUnmounted, nextTick, ref, watch } from 'vue'
 import axios from 'axios'
+import CyclingNavigation from './CyclingNavigation.vue'
+import TrajectoryPlayback from './TrajectoryPlayback.vue'
 
 // 当前地图样式
 const currentStyle = ref('fresh')
@@ -60,6 +102,12 @@ let globalAMapInstance = null
 const currentRouteCurve = ref(null)
 // 当前路线标记点数组
 const currentRouteMarkers = ref([])
+// 骑行导航相关状态
+const showNavigation = ref(false)
+const cyclingNavigationRef = ref(null)
+// 轨迹回放相关状态
+const showTrajectory = ref(false)
+const trajectoryPlaybackRef = ref(null)
 
 // 跳转到指定位置
 const jumpToLocation = (longitude, latitude, markerType = 'waystation') => {
@@ -616,10 +664,11 @@ const initMap = async (retryCount = 0, savedCenter = null, savedZoom = null) => 
       console.log('首次加载AMap API')
       AMap = await AMapLoader.load({
         key: 'b7fb4f223f6cbffc2d995a508d10f7cd',
-        version: '2.1Beta' // 统一使用2.1Beta版本，同时支持2D和3D
+        version: '2.1Beta', // 统一使用2.1Beta版本，同时支持2D和3D
+        plugins: ['AMap.Riding', 'AMap.MoveAnimation'] // 加载骑行导航和轨迹动画插件
       })
       globalAMapInstance = AMap
-      console.log('AMap API加载完成并缓存')
+      console.log('AMap API加载完成并缓存（包含骑行导航插件）')
     } else {
       console.log('使用缓存的AMap实例')
     }
@@ -1375,6 +1424,343 @@ const addWaystationsToRoute = (filteredData = null) => {
   }
 }
 
+// 切换骑行导航显示
+const toggleNavigation = () => {
+  showNavigation.value = !showNavigation.value
+  console.log('切换骑行导航显示:', showNavigation.value)
+}
+
+// 处理路线规划完成事件
+const handleRoutePlanned = (data) => {
+  console.log('骑行路线规划完成:', data)
+  
+  // 可以在这里添加额外的处理逻辑
+  // 比如显示路线信息、调整地图视角等
+  
+  // 发送自定义事件（如果需要通知父组件）
+  // emit('cycling-route-planned', data)
+}
+
+// 处理路线清除事件
+const handleRouteCleared = () => {
+  console.log('骑行路线已清除')
+  
+  // 可以在这里添加额外的清理逻辑
+  
+  // 发送自定义事件（如果需要通知父组件）
+  // emit('cycling-route-cleared')
+}
+
+// 处理路线步骤高亮事件
+const handleStepHighlighted = (data) => {
+  console.log('路线步骤高亮:', data)
+  
+  // 可以在这里添加步骤高亮的视觉效果
+  // 比如在地图上高亮显示该步骤的路径
+}
+
+// 通过编程方式设置导航起点（供外部调用）
+const setNavigationStart = (longitude, latitude) => {
+  if (cyclingNavigationRef.value) {
+    cyclingNavigationRef.value.setStartPoint(longitude, latitude)
+    if (!showNavigation.value) {
+      showNavigation.value = true
+    }
+  }
+}
+
+// 通过编程方式设置导航终点（供外部调用）
+const setNavigationEnd = (longitude, latitude) => {
+  if (cyclingNavigationRef.value) {
+    cyclingNavigationRef.value.setEndPoint(longitude, latitude)
+    if (!showNavigation.value) {
+      showNavigation.value = true
+    }
+  }
+}
+
+// 通过编程方式设置导航起点（关键字模式）
+const setNavigationStartKeyword = (keyword, city = '北京') => {
+  if (cyclingNavigationRef.value) {
+    cyclingNavigationRef.value.setStartKeyword(keyword, city)
+    if (!showNavigation.value) {
+      showNavigation.value = true
+    }
+  }
+}
+
+// 通过编程方式设置导航终点（关键字模式）
+const setNavigationEndKeyword = (keyword, city = '北京') => {
+  if (cyclingNavigationRef.value) {
+    cyclingNavigationRef.value.setEndKeyword(keyword, city)
+    if (!showNavigation.value) {
+      showNavigation.value = true
+    }
+  }
+}
+
+// 开始导航规划（供外部调用）
+const startNavigation = () => {
+  if (cyclingNavigationRef.value) {
+    cyclingNavigationRef.value.searchRoute()
+  }
+}
+
+// 清除导航路线（供外部调用）
+const clearNavigation = () => {
+  if (cyclingNavigationRef.value) {
+    cyclingNavigationRef.value.clearRoute()
+  }
+}
+
+// 切换轨迹回放显示
+const toggleTrajectory = () => {
+  showTrajectory.value = !showTrajectory.value
+  console.log('切换轨迹回放显示:', showTrajectory.value)
+}
+
+// 处理轨迹加载完成事件
+const handleTrajectoryLoaded = (data) => {
+  console.log('轨迹加载完成:', data)
+  
+  // 可以在这里添加额外的处理逻辑
+  // 比如调整地图视角、显示轨迹信息等
+}
+
+// 处理轨迹回放开始事件
+const handlePlaybackStarted = () => {
+  console.log('轨迹回放开始')
+  
+  // 可以在这里添加额外的处理逻辑
+  // 比如隐藏其他标记、调整地图交互等
+}
+
+// 处理轨迹回放暂停事件
+const handlePlaybackPaused = () => {
+  console.log('轨迹回放暂停')
+}
+
+// 处理轨迹回放停止事件
+const handlePlaybackStopped = () => {
+  console.log('轨迹回放停止')
+}
+
+// 处理轨迹回放完成事件
+const handlePlaybackCompleted = () => {
+  console.log('轨迹回放完成')
+  
+  // 可以在这里添加完成后的处理逻辑
+  // 比如显示完成提示、恢复地图状态等
+}
+
+// 通过编程方式加载预设轨迹（供外部调用）
+const loadPresetTrajectory = (index) => {
+  if (trajectoryPlaybackRef.value) {
+    trajectoryPlaybackRef.value.setPresetTrajectory(index)
+    if (!showTrajectory.value) {
+      showTrajectory.value = true
+    }
+  }
+}
+
+// 通过编程方式加载自定义轨迹（供外部调用）
+const loadCustomTrajectory = (path) => {
+  if (trajectoryPlaybackRef.value) {
+    trajectoryPlaybackRef.value.setCustomTrajectory(path)
+    if (!showTrajectory.value) {
+      showTrajectory.value = true
+    }
+  }
+}
+
+// 设置并自动加载自定义轨迹（供外部调用）
+const setAndLoadCustomTrajectory = async (path) => {
+  if (trajectoryPlaybackRef.value) {
+    if (!showTrajectory.value) {
+      showTrajectory.value = true
+    }
+    await trajectoryPlaybackRef.value.setAndLoadCustomTrajectory(path)
+  } else {
+    console.warn('轨迹回放组件未准备就绪')
+  }
+}
+
+// 直接播放轨迹动画（不显示控制面板）
+const directTrajectoryPlayback = async (trajectoryPath, name = '轨迹回放') => {
+  console.log('=== Map.vue 直接轨迹回放 ===')
+  console.log('轨迹路径:', trajectoryPath)
+  console.log('轨迹名称:', name)
+  
+  if (!mapInstance.value) {
+    console.error('地图实例未准备就绪')
+    return
+  }
+  
+  try {
+    // 确保已加载动画插件
+    if (!window.AMap.MoveAnimation) {
+      await new Promise((resolve) => {
+        AMap.plugin('AMap.MoveAnimation', () => {
+          console.log('MoveAnimation 插件加载成功')
+          resolve()
+        })
+      })
+    }
+    
+    // 创建自行车图标
+    const createBicycleIcon = () => {
+      const bicycleSvg = `
+        <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+          <!-- 自行车轮子 -->
+          <circle cx="8" cy="22" r="6" fill="none" stroke="#333" stroke-width="2"/>
+          <circle cx="24" cy="22" r="6" fill="none" stroke="#333" stroke-width="2"/>
+          <!-- 车轮中心 -->
+          <circle cx="8" cy="22" r="1.5" fill="#333"/>
+          <circle cx="24" cy="22" r="1.5" fill="#333"/>
+          <!-- 车架 -->
+          <line x1="8" y1="22" x2="16" y2="12" stroke="#4CAF50" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="16" y1="12" x2="24" y2="22" stroke="#4CAF50" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="16" y1="12" x2="16" y2="6" stroke="#4CAF50" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="8" y1="22" x2="24" y2="22" stroke="#4CAF50" stroke-width="2" stroke-linecap="round"/>
+          <!-- 座椅 -->
+          <line x1="12" y1="16" x2="18" y2="16" stroke="#333" stroke-width="3" stroke-linecap="round"/>
+          <line x1="15" y1="16" x2="15" y2="12" stroke="#333" stroke-width="2"/>
+          <!-- 把手 -->
+          <line x1="14" y1="6" x2="18" y2="6" stroke="#333" stroke-width="3" stroke-linecap="round"/>
+          <!-- 踏板 -->
+          <circle cx="16" cy="19" r="2" fill="none" stroke="#666" stroke-width="1.5"/>
+          <line x1="14" y1="19" x2="18" y2="19" stroke="#666" stroke-width="2"/>
+        </svg>
+      `
+      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(bicycleSvg)
+    }
+    
+    // 清除现有的轨迹回放标记和线条
+    if (window.directPlaybackMarker) {
+      window.directPlaybackMarker.setMap(null)
+      window.directPlaybackMarker = null
+    }
+    if (window.directPlaybackPolyline) {
+      window.directPlaybackPolyline.setMap(null)
+      window.directPlaybackPolyline = null
+    }
+    if (window.directPassedPolyline) {
+      window.directPassedPolyline.setMap(null)
+      window.directPassedPolyline = null
+    }
+    
+    // 创建轨迹标记
+    window.directPlaybackMarker = new AMap.Marker({
+      map: mapInstance.value,
+      position: trajectoryPath[0],
+      icon: createBicycleIcon(),
+      offset: new AMap.Pixel(-16, -16),
+      anchor: 'center'
+    })
+    
+    // 绘制完整轨迹线
+    window.directPlaybackPolyline = new AMap.Polyline({
+      map: mapInstance.value,
+      path: trajectoryPath,
+      showDir: true,
+      strokeColor: "#28F",
+      strokeWeight: 6,
+      strokeOpacity: 0.8
+    })
+    
+    // 创建已走轨迹线
+    window.directPassedPolyline = new AMap.Polyline({
+      map: mapInstance.value,
+      strokeColor: "#AF5",
+      strokeWeight: 6,
+      strokeOpacity: 0.9
+    })
+    
+    // 监听移动事件
+    window.directPlaybackMarker.on('moving', (e) => {
+      if (window.directPassedPolyline) {
+        window.directPassedPolyline.setPath(e.passedPath)
+      }
+      // 地图跟随
+      mapInstance.value.setCenter(e.target.getPosition(), true)
+    })
+    
+    // 监听动画完成事件
+    window.directPlaybackMarker.on('moveend', () => {
+      console.log('直接轨迹回放完成')
+    })
+    
+    // 调整地图视野
+    mapInstance.value.setFitView([window.directPlaybackMarker, window.directPlaybackPolyline])
+    
+    // 等待一下让地图调整完成，然后开始动画
+    setTimeout(() => {
+      console.log('开始直接轨迹回放动画')
+      window.directPlaybackMarker.moveAlong(trajectoryPath, {
+        duration: 500, // 每段的时长（毫秒）
+        autoRotation: true, // 自动旋转
+      })
+    }, 1000)
+    
+    console.log('直接轨迹回放设置完成')
+    
+  } catch (error) {
+    console.error('直接轨迹回放失败:', error)
+    throw error
+  }
+}
+
+// 清除直接轨迹回放
+const clearDirectTrajectoryPlayback = () => {
+  console.log('清除直接轨迹回放')
+  
+  // 清除标记
+  if (window.directPlaybackMarker) {
+    window.directPlaybackMarker.setMap(null)
+    window.directPlaybackMarker = null
+  }
+  
+  // 清除轨迹线
+  if (window.directPlaybackPolyline) {
+    window.directPlaybackPolyline.setMap(null)
+    window.directPlaybackPolyline = null
+  }
+  
+  // 清除已走轨迹线
+  if (window.directPassedPolyline) {
+    window.directPassedPolyline.setMap(null)
+    window.directPassedPolyline = null
+  }
+}
+
+// 开始轨迹回放（供外部调用）
+const startTrajectoryPlayback = () => {
+  if (trajectoryPlaybackRef.value) {
+    trajectoryPlaybackRef.value.startAnimation()
+  }
+}
+
+// 暂停轨迹回放（供外部调用）
+const pauseTrajectoryPlayback = () => {
+  if (trajectoryPlaybackRef.value) {
+    trajectoryPlaybackRef.value.pauseAnimation()
+  }
+}
+
+// 停止轨迹回放（供外部调用）
+const stopTrajectoryPlayback = () => {
+  if (trajectoryPlaybackRef.value) {
+    trajectoryPlaybackRef.value.stopAnimation()
+  }
+}
+
+// 清除轨迹回放（供外部调用）
+const clearTrajectoryPlayback = () => {
+  if (trajectoryPlaybackRef.value) {
+    trajectoryPlaybackRef.value.clearTrajectory()
+  }
+}
+
 // 暴露方法给父组件
 defineExpose({
   jumpToLocation,
@@ -1388,7 +1774,26 @@ defineExpose({
   drawRouteCurve,
   clearRouteCurve,
   addWaystationsToRoute,
-  hasActiveRoute
+  hasActiveRoute,
+  // 骑行导航相关方法
+  toggleNavigation,
+  setNavigationStart,
+  setNavigationEnd,
+  setNavigationStartKeyword,
+  setNavigationEndKeyword,
+  startNavigation,
+  clearNavigation,
+  // 轨迹回放相关方法
+  toggleTrajectory,
+  loadPresetTrajectory,
+  loadCustomTrajectory,
+  setAndLoadCustomTrajectory,
+  directTrajectoryPlayback,
+  clearDirectTrajectoryPlayback,
+  startTrajectoryPlayback,
+  pauseTrajectoryPlayback,
+  stopTrajectoryPlayback,
+  clearTrajectoryPlayback
 })
 </script>
 
@@ -1441,17 +1846,63 @@ defineExpose({
   user-select: none;
 }
 
-.mode-toggle-button:hover {
+/* 骑行导航切换按钮 */
+.navigation-toggle-button {
+  position: absolute;
+  top: 10px;
+  left: 80px; /* 位于3D按钮右侧 */
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.95);
+  border: none;
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.3s ease;
+  user-select: none;
+}
+
+/* 轨迹回放切换按钮 */
+.trajectory-toggle-button {
+  position: absolute;
+  top: 10px;
+  left: 150px; /* 位于导航按钮右侧 */
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.95);
+  border: none;
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.3s ease;
+  user-select: none;
+}
+
+.mode-toggle-button:hover,
+.navigation-toggle-button:hover,
+.trajectory-toggle-button:hover {
   background: rgba(64, 158, 255, 0.1);
   transform: translateY(-1px);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
-.mode-toggle-button:active {
+.mode-toggle-button:active,
+.navigation-toggle-button:active,
+.trajectory-toggle-button:active {
   transform: translateY(0);
 }
 
-.mode-icon {
+.mode-icon,
+.nav-icon,
+.trajectory-icon {
   width: 20px;
   height: 20px;
   stroke-width: 2;
@@ -1459,18 +1910,24 @@ defineExpose({
   transition: color 0.2s ease;
 }
 
-.mode-toggle-button:hover .mode-icon {
+.mode-toggle-button:hover .mode-icon,
+.navigation-toggle-button:hover .nav-icon,
+.trajectory-toggle-button:hover .trajectory-icon {
   color: #409eff;
 }
 
-.mode-text {
+.mode-text,
+.nav-text,
+.trajectory-text {
   font-size: 12px;
   font-weight: 600;
   color: #606266;
   transition: color 0.2s ease;
 }
 
-.mode-toggle-button:hover .mode-text {
+.mode-toggle-button:hover .mode-text,
+.navigation-toggle-button:hover .nav-text,
+.trajectory-toggle-button:hover .trajectory-text {
   color: #409eff;
 }
 
@@ -1567,13 +2024,33 @@ defineExpose({
     padding: 10px;
     border-radius: 6px;
   }
+
+  /* 导航按钮移动端优化 */
+  .navigation-toggle-button {
+    top: 5px;
+    left: 65px; /* 调整位置适应移动端 */
+    padding: 10px;
+    border-radius: 6px;
+  }
+
+  /* 轨迹按钮移动端优化 */
+  .trajectory-toggle-button {
+    top: 5px;
+    left: 125px; /* 调整位置适应移动端 */
+    padding: 10px;
+    border-radius: 6px;
+  }
   
-  .mode-icon {
+  .mode-icon,
+  .nav-icon,
+  .trajectory-icon {
     width: 18px;
     height: 18px;
   }
   
-  .mode-text {
+  .mode-text,
+  .nav-text,
+  .trajectory-text {
     font-size: 11px;
   }
   

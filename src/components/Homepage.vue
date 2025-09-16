@@ -1,5 +1,20 @@
 <template>
   <div class="homepage">
+    <!-- 背景视频 -->
+    <div class="background-video">
+      <iframe 
+        src="https://player.bilibili.com/player.html?isOutside=true&aid=375573984&bvid=BV1uo4y1m74J&cid=337981426&p=1&autoplay=1&muted=1&high_quality=1&danmaku=0&t=0&as_wide=1&hasMuteBtn=1" 
+        scrolling="no" 
+        border="0" 
+        frameborder="no" 
+        framespacing="0" 
+        allowfullscreen="true"
+        sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
+        referrerpolicy="no-referrer-when-downgrade"
+        class="video-iframe">
+      </iframe>
+    </div>
+    
     <!-- 主标题区域 -->
     <h1 class="title">517骑行驿站</h1>
 
@@ -231,8 +246,215 @@ const createIntersectionObserver = () => {
 
 let intersectionObserver = null
 
+// 抑制第三方脚本错误和开发者工具警告
+const suppressThirdPartyErrors = () => {
+  // 捕获并忽略第三方脚本相关的错误
+  window.addEventListener('error', (e) => {
+    const errorSources = ['bilibili', 's1.hdslb.com', 'devtools', 'chrome-extension', 'bili-user-fingerprint']
+    if (e.filename && errorSources.some(source => e.filename.includes(source))) {
+      console.log('🔇 第三方脚本错误已抑制:', e.message)
+      e.preventDefault()
+      return false
+    }
+    
+    // 检查错误消息内容
+    if (e.message && errorSources.some(source => e.message.includes(source))) {
+      console.log('🔇 第三方错误消息已抑制:', e.message)
+      e.preventDefault()
+      return false
+    }
+  })
+  
+  // 捕获未处理的Promise拒绝
+  window.addEventListener('unhandledrejection', (e) => {
+    const errorSources = ['bilibili', 's1.hdslb.com', 'devtools', 'runtime.lastError', 'bili-user-fingerprint', 'report is not found']
+    if (e.reason) {
+      const reasonStr = e.reason.toString()
+      if (errorSources.some(source => reasonStr.includes(source))) {
+        console.log('🔇 第三方Promise拒绝已抑制:', e.reason)
+        e.preventDefault()
+        return false
+      }
+    }
+  })
+  
+  // 抑制Chrome扩展相关的运行时错误
+  if (typeof chrome !== 'undefined' && chrome.runtime) {
+    try {
+      Object.defineProperty(chrome.runtime, 'lastError', {
+        get: function() {
+          return undefined
+        },
+        configurable: true
+      })
+    } catch (error) {
+      // 忽略设置失败
+    }
+  }
+  
+  // 抑制console中的bilibili相关错误
+  const originalConsoleError = console.error
+  console.error = function(...args) {
+    const message = args.join(' ')
+    if (message.includes('bilibili') || message.includes('bili-user-fingerprint')) {
+      console.log('🔇 Bilibili控制台错误已抑制:', message)
+      return
+    }
+    originalConsoleError.apply(console, args)
+  }
+}
+
+// 动态设置单车骑行主题cursor
+const setupBicycleCursors = () => {
+  // 使用内联SVG创建单车主题的cursor
+  const createBicycleCursor = (svgContent, hotspotX = 16, hotspotY = 16) => {
+    const svgBase64 = btoa(unescape(encodeURIComponent(svgContent)))
+    return `url("data:image/svg+xml;base64,${svgBase64}") ${hotspotX} ${hotspotY}, auto`
+  }
+  
+  // 单车主题SVG图标定义
+  const bicycleCursors = {
+    // 默认箭头 - 简约单车轮廓
+    arrow: createBicycleCursor(`
+      <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <g fill="#2E7D32" stroke="#1B5E20" stroke-width="2">
+          <!-- 车轮 -->
+          <circle cx="8" cy="20" r="6" fill="none"/>
+          <circle cx="24" cy="20" r="6" fill="none"/>
+          <!-- 车架 -->
+          <path d="M8 20 L16 8 L24 20 M16 8 L20 12 M12 16 L20 16" fill="none"/>
+          <!-- 车座 -->
+          <rect x="10" y="7" width="4" height="2" rx="1"/>
+        </g>
+      </svg>
+    `, 16, 16),
+    
+    // 手型指针 - 骑行手势
+    hand: createBicycleCursor(`
+      <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <g fill="#388E3C" stroke="#2E7D32" stroke-width="1.5">
+          <!-- 手掌 -->
+          <ellipse cx="16" cy="18" rx="8" ry="6"/>
+          <!-- 握把 -->
+          <rect x="12" y="10" width="8" height="3" rx="1.5" fill="#795548"/>
+          <!-- 骑行动作线条 -->
+          <path d="M8 22 Q16 26 24 22" fill="none" stroke="#4CAF50" stroke-width="2"/>
+        </g>
+      </svg>
+    `, 16, 16),
+    
+    // 文本选择 - 路标样式
+    text: createBicycleCursor(`
+      <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <g fill="#1976D2" stroke="#0D47A1" stroke-width="1.5">
+          <!-- 路标柱 -->
+          <rect x="15" y="8" width="2" height="20"/>
+          <!-- 路标板 -->
+          <rect x="8" y="6" width="16" height="8" rx="2"/>
+          <!-- 文字线条 -->
+          <line x1="10" y1="9" x2="22" y2="9" stroke="#fff" stroke-width="1"/>
+          <line x1="10" y1="11" x2="20" y2="11" stroke="#fff" stroke-width="1"/>
+        </g>
+      </svg>
+    `, 16, 16),
+    
+    // 等待指针 - 转动的车轮
+    wait: createBicycleCursor(`
+      <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <g fill="#FF5722" stroke="#D84315" stroke-width="2">
+          <!-- 外圈 -->
+          <circle cx="16" cy="16" r="10" fill="none"/>
+          <!-- 辐条（动态感） -->
+          <path d="M16 6 L16 26 M6 16 L26 16 M10.3 10.3 L21.7 21.7 M21.7 10.3 L10.3 21.7" fill="none"/>
+          <!-- 中心轮毂 -->
+          <circle cx="16" cy="16" r="3"/>
+        </g>
+      </svg>
+    `, 16, 16),
+    
+    // 移动指针 - 骑行方向箭头
+    move: createBicycleCursor(`
+      <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <g fill="#8BC34A" stroke="#558B2F" stroke-width="2">
+          <!-- 主箭头 -->
+          <path d="M8 16 L24 16 M20 12 L24 16 L20 20" fill="none"/>
+          <!-- 车轮轨迹 -->
+          <circle cx="8" cy="12" r="2" fill="none" opacity="0.6"/>
+          <circle cx="8" cy="20" r="2" fill="none" opacity="0.6"/>
+          <!-- 运动线条 -->
+          <path d="M2 14 Q6 16 2 18" fill="none" stroke-width="1"/>
+        </g>
+      </svg>
+    `, 16, 16)
+  }
+  
+  // 应用cursor设置（带重试机制）
+  const applyCursors = () => {
+    const homepageElement = document.querySelector('.homepage')
+    if (!homepageElement) {
+      console.log('⏳ Homepage元素还未准备好，500ms后重试...')
+      setTimeout(applyCursors, 500)
+      return
+    }
+    
+    try {
+      // 设置默认单车cursor
+      homepageElement.style.cursor = bicycleCursors.arrow
+      
+      // 为普通子元素设置单车cursor
+      const allElements = homepageElement.querySelectorAll('*')
+      allElements.forEach(el => {
+        if (!el.classList.contains('card-button') && 
+            !el.classList.contains('box') &&
+            !el.classList.contains('loading') &&
+            !el.classList.contains('text-selectable')) {
+          el.style.cursor = bicycleCursors.arrow
+        }
+      })
+      
+      // 为按钮和卡片设置骑行手势cursor
+      const interactiveElements = homepageElement.querySelectorAll('.card-button, .box')
+      interactiveElements.forEach(el => {
+        el.style.cursor = bicycleCursors.hand
+      })
+      
+      // 为等待状态设置转动车轮cursor
+      const loadingElements = homepageElement.querySelectorAll('.loading')
+      loadingElements.forEach(el => {
+        el.style.cursor = bicycleCursors.wait
+      })
+      
+      // 为文本选择设置路标cursor
+      const textElements = homepageElement.querySelectorAll('.text-selectable')
+      textElements.forEach(el => {
+        el.style.cursor = bicycleCursors.text
+      })
+      
+      console.log('🚴‍♂️ 单车骑行主题cursor设置成功:')
+      console.log('🚲 默认箭头: 单车轮廓图标')
+      console.log('🤏 手型指针: 骑行握把手势')
+      console.log('🏷️ 文本选择: 路标样式')
+      console.log('⚡ 等待指针: 转动车轮')
+      console.log('➡️ 移动指针: 骑行方向箭头')
+    } catch (error) {
+      console.error('❌ 设置单车cursor时出错:', error)
+    }
+  }
+  
+  // 延迟执行以确保DOM已准备好
+  setTimeout(applyCursors, 100)
+}
+
 // 组件挂载后初始化
 onMounted(async () => {
+  // 抑制第三方脚本错误和开发者工具警告
+  suppressThirdPartyErrors()
+  
+  // 设置单车骑行主题cursor
+  nextTick(() => {
+    setupBicycleCursors()
+  })
+  
   // 使用 requestIdleCallback 延迟非关键初始化
   requestIdleCallback(() => {
     fetchHomepageImages()
@@ -464,7 +686,6 @@ const handleCardClick = (image, index) => {
 .homepage {
   width: 100vw !important;
   min-height: 100vh;
-  background-color: var(--primary-bg);
   font-family: "Raleway", "Microsoft YaHei", sans-serif;
   font-weight: 500;
   -webkit-font-smoothing: antialiased;
@@ -473,17 +694,62 @@ const handleCardClick = (image, index) => {
   position: relative;
   left: 0;
   right: 0;
+  overflow: hidden;
 }
 
-/* 主标题 */
+/* CSS中不设置cursor，完全由JavaScript动态设置 */
+
+/* 所有cursor都由JavaScript动态设置，CSS不参与 */
+
+/* 背景视频样式 */
+.background-video {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  overflow: hidden;
+}
+
+.video-iframe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 120%;
+  height: 120%;
+  transform: translate(-50%, -50%);
+  border: none;
+  opacity: 0.4;
+  filter: blur(0.5px) saturate(1.2) brightness(1.1);
+}
+
+/* 主标题 - 无人机旅游风格 */
 .title {
   font-family: "Raleway", "Microsoft YaHei", sans-serif;
   font-size: 3rem;
-  font-weight: 700;
-  color: var(--primary-text);
+  font-weight: 300;
+  color: #ffffff;
   text-align: center;
   margin-bottom: 40px;
-  text-shadow: rgba(0, 0, 0, 0.1) 0 2px 4px;
+  text-shadow: rgba(0, 0, 0, 0.5) 0 2px 15px, rgba(0, 0, 0, 0.3) 0 1px 6px;
+  position: relative;
+  z-index: 10;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%);
+  padding: 25px 50px;
+  border-radius: 20px;
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  transition: all 0.3s ease;
+}
+
+.title:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.05) 100%);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 
 /* 容器 */
@@ -494,29 +760,40 @@ const handleCardClick = (image, index) => {
   box-sizing: border-box;
   height: 80vh;
   margin-top: 2rem;
+  position: relative;
+  z-index: 5;
 }
 
-/* 卡片盒子 - 企业级GPU优化 */
+/* 卡片盒子 - 无人机旅游风格 */
 .box {
   flex: 1;
   overflow: hidden;
-  transition: flex 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: flex 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s ease, box-shadow 0.3s ease;
   margin: 0 2%;
-  box-shadow: 0 20px 30px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15), 
+              0 5px 15px rgba(0, 0, 0, 0.1),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
   line-height: 0;
   position: relative;
-  cursor: pointer;
-  border-radius: 10px;
+  border-radius: 20px;
   will-change: flex;
   transform: translateZ(0);
   backface-visibility: hidden;
   -webkit-perspective: 1000px;
   perspective: 1000px;
   contain: layout style paint;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .box:hover {
   flex: 1 1 50%;
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25), 
+              0 10px 25px rgba(0, 0, 0, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
 .box:hover .card-bg {
@@ -530,7 +807,7 @@ const handleCardClick = (image, index) => {
 }
 
 .box:hover .card-title-bar {
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.6) 70%, rgba(0, 0, 0, 0.1) 100%);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.6) 60%, rgba(0, 0, 0, 0.2) 100%);
 }
 
 .box:hover .card-button {
@@ -540,8 +817,10 @@ const handleCardClick = (image, index) => {
 
 .card-button:hover {
   transform: translateY(-2px) scale(1.05);
-  box-shadow: 0 6px 20px rgba(0, 184, 148, 0.4);
-  transition: all 0.6s ease;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.1) 100%);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 25px rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
 }
 
 .card-button:hover::before {
@@ -642,12 +921,12 @@ const handleCardClick = (image, index) => {
   }
 }
 
-/* 卡片背景 - 企业级优化 */
+/* 卡片背景 - 无人机旅游风格 */
 .card-bg {
   width: 200%;
   height: 100%;
   object-fit: cover;
-  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1), height 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1), height 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
   position: absolute;
   top: 0;
   left: 0;
@@ -661,25 +940,37 @@ const handleCardClick = (image, index) => {
   contain: layout style paint;
   isolation: isolate;
   z-index: 1;
+  opacity: 0.85;
+  border-radius: 20px;
+  filter: saturate(1.1) contrast(1.05);
 }
 
-/* 卡片标题栏 - 企业级优化 */
+.box:hover .card-bg {
+  opacity: 0.95;
+  filter: saturate(1.2) contrast(1.1);
+}
+
+/* 卡片标题栏 - 无人机旅游风格 */
 .card-title-bar {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
   height: 10vh;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.4) 70%, rgba(0, 0, 0, 0) 100%);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0.4) 60%, rgba(0, 0, 0, 0.1) 100%);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  padding: 0 25px;
   z-index: 2;
   transition: background 0.5s cubic-bezier(0.4, 0, 0.2, 1);
   transform: translateZ(0);
   backface-visibility: hidden;
   contain: layout style paint;
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border-radius: 0 0 20px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .card-title-wrapper {
@@ -787,15 +1078,14 @@ const handleCardClick = (image, index) => {
 
 .card-button {
   position: relative;
-  background: linear-gradient(56deg, #00b894 0%, #00cec9 46%, #74b9ff 100%);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%);
   color: white;
-  border: none;
-  padding: 10px 20px 12px;
-  border-radius: 10rem;
-  font-size: 2.2vh;
-  font-weight: 700;
-  cursor: pointer;
-  transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 12px 24px 14px;
+  border-radius: 25px;
+  font-size: 2vh;
+  font-weight: 400;
+  transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease;
   opacity: 0;
   transform: translate3d(20px, 0, 0);
   font-family: "Raleway", sans-serif;
@@ -806,8 +1096,10 @@ const handleCardClick = (image, index) => {
   transform-style: preserve-3d;
   overflow: hidden;
   z-index: 3;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .card-button::before {

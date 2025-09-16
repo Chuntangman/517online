@@ -13,6 +13,16 @@
   box-sizing: border-box;
 }
 
+/* 确保不覆盖组件的自定义cursor样式 */
+* {
+  cursor: inherit;
+}
+
+/* 全局默认cursor设置 */
+body {
+  cursor: auto;
+}
+
 html {
   width: 100%;
   height: 100%;
