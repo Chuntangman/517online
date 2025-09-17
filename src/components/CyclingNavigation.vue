@@ -194,6 +194,54 @@
               <span class="info-value">{{ getPolicyName(routePolicy) }}</span>
             </div>
           </div>
+          
+          <!-- 高程信息显示 -->
+          <div v-if="elevationStats" class="elevation-info">
+            <h5>🏔️ 高程信息</h5>
+            <div class="elevation-stats">
+              <div class="elevation-row">
+                <div class="elevation-stat">
+                  <span class="elevation-label">最高海拔:</span>
+                  <span class="elevation-value">{{ elevationStats.maxElevation }}m</span>
+                </div>
+                <div class="elevation-stat">
+                  <span class="elevation-label">最低海拔:</span>
+                  <span class="elevation-value">{{ elevationStats.minElevation }}m</span>
+                </div>
+              </div>
+              <div class="elevation-row">
+                <div class="elevation-stat">
+                  <span class="elevation-label">平均海拔:</span>
+                  <span class="elevation-value">{{ elevationStats.averageElevation }}m</span>
+                </div>
+                <div class="elevation-stat">
+                  <span class="elevation-label">高程差:</span>
+                  <span class="elevation-value">{{ elevationStats.elevationRange }}m</span>
+                </div>
+              </div>
+              <div class="elevation-row">
+                <div class="elevation-stat">
+                  <span class="elevation-label">累计爬升:</span>
+                  <span class="elevation-value climb">+{{ elevationStats.totalAscent }}m</span>
+                </div>
+                <div class="elevation-stat">
+                  <span class="elevation-label">累计下降:</span>
+                  <span class="elevation-value descent">-{{ elevationStats.totalDescent }}m</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 高程加载状态 -->
+          <div v-if="elevationLoading" class="elevation-loading">
+            <div class="loading-content">
+              <svg class="loading-icon" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/>
+                <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"/>
+              </svg>
+              <span>正在获取高程数据...</span>
+            </div>
+          </div>
         </div>
 
         <!-- 错误信息显示 -->
@@ -247,6 +295,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useElevation } from '@/composables/useElevation'
 
 // 定义 props 和 emits
 const props = defineProps({
@@ -289,6 +338,18 @@ const errorMessage = ref('')
 
 // 途径点数据
 const waypointsData = ref([])
+
+// 高程数据相关
+const { 
+  isLoading: elevationLoading, 
+  error: elevationError, 
+  elevationData, 
+  getElevationForRoute, 
+  calculateElevationStats, 
+  clearElevationData 
+} = useElevation()
+const elevationStats = ref(null)
+const showElevationData = ref(false)
 
 // 高德地图骑行导航实例
 const ridingInstance = ref(null)
@@ -493,7 +554,7 @@ const searchRoute = async () => {
 }
 
 // 处理路线搜索成功
-const handleRouteSuccess = (result) => {
+const handleRouteSuccess = async (result) => {
   const route = result.routes[0]
   
   // 保存路线信息
@@ -508,17 +569,24 @@ const handleRouteSuccess = (result) => {
   // 绘制路线
   drawRoute(route)
   
+  // 获取高程数据
+  await fetchElevationData(route)
+  
   hasActiveRoute.value = true
   isStepsCollapsed.value = false
 
-  // 发送事件
+  // 发送事件（包含高程数据）
   emit('route-planned', {
     route: route,
     info: routeInfo.value,
-    steps: routeSteps.value
+    steps: routeSteps.value,
+    elevationStats: elevationStats.value
   })
 
   console.log('路线规划成功:', routeInfo.value)
+  if (elevationStats.value) {
+    console.log('高程统计:', elevationStats.value)
+  }
 }
 
 // 处理路线搜索失败
@@ -526,6 +594,119 @@ const handleRouteError = (result) => {
   console.error('路线搜索失败:', result)
   errorMessage.value = '未找到合适的骑行路线，请检查起终点是否正确'
   hasActiveRoute.value = false
+}
+
+// 获取路线高程数据
+const fetchElevationData = async (route) => {
+  try {
+    console.log('开始获取路线高程数据')
+    showElevationData.value = true
+    
+    // 提取路线坐标
+    const coordinates = extractRouteCoordinates(route)
+    
+    if (coordinates.length === 0) {
+      console.warn('无法提取路线坐标，跳过高程数据获取')
+      return
+    }
+    
+    console.log(`提取到 ${coordinates.length} 个坐标点`)
+    
+    // 获取高程数据
+    const elevationResults = await getElevationForRoute(coordinates)
+    
+    if (elevationResults && elevationResults.length > 0) {
+      // 计算高程统计信息
+      elevationStats.value = calculateElevationStats(elevationResults)
+      console.log('高程数据获取成功:', elevationStats.value)
+    } else {
+      console.warn('未获取到有效的高程数据')
+      elevationStats.value = null
+    }
+    
+  } catch (error) {
+    console.error('获取高程数据失败:', error)
+    elevationStats.value = null
+  }
+}
+
+// 从路线中提取坐标点
+const extractRouteCoordinates = (route) => {
+  const coordinates = []
+  
+  try {
+    // 方法1: 从route.path获取（如果可用）
+    if (route.path && Array.isArray(route.path) && route.path.length > 0) {
+      route.path.forEach(point => {
+        if (point && point.lng && point.lat) {
+          coordinates.push({ lng: point.lng, lat: point.lat })
+        } else if (Array.isArray(point) && point.length >= 2) {
+          coordinates.push({ lng: point[0], lat: point[1] })
+        }
+      })
+      console.log(`从route.path提取到 ${coordinates.length} 个坐标`)
+      return coordinates
+    }
+    
+    // 方法2: 从route.rides.path获取
+    if (route.rides && Array.isArray(route.rides)) {
+      route.rides.forEach(ride => {
+        if (ride.path && Array.isArray(ride.path)) {
+          ride.path.forEach(point => {
+            if (point && point.lng && point.lat) {
+              coordinates.push({ lng: point.lng, lat: point.lat })
+            } else if (Array.isArray(point) && point.length >= 2) {
+              coordinates.push({ lng: point[0], lat: point[1] })
+            }
+          })
+        }
+      })
+      console.log(`从route.rides.path提取到 ${coordinates.length} 个坐标`)
+    }
+    
+    // 方法3: 如果没有足够的坐标，使用起终点和途径点
+    if (coordinates.length < 2) {
+      console.log('路径坐标不足，使用起终点和途径点数据')
+      
+      // 添加起点
+      if (searchMode.value === 'coordinates') {
+        coordinates.push({
+          lng: parseFloat(startCoordinates.value.lng),
+          lat: parseFloat(startCoordinates.value.lat),
+          name: '起点'
+        })
+      }
+      
+      // 添加途径点
+      if (waypointsData.value && waypointsData.value.length > 0) {
+        waypointsData.value.forEach((wp, index) => {
+          if (wp.longitude && wp.latitude) {
+            coordinates.push({
+              lng: parseFloat(wp.longitude),
+              lat: parseFloat(wp.latitude),
+              name: wp.name || `途径点${index + 1}`
+            })
+          }
+        })
+      }
+      
+      // 添加终点
+      if (searchMode.value === 'coordinates') {
+        coordinates.push({
+          lng: parseFloat(endCoordinates.value.lng),
+          lat: parseFloat(endCoordinates.value.lat),
+          name: '终点'
+        })
+      }
+      
+      console.log(`使用起终点和途径点，共 ${coordinates.length} 个坐标`)
+    }
+    
+  } catch (error) {
+    console.error('提取路线坐标失败:', error)
+  }
+  
+  return coordinates
 }
 
 
@@ -649,6 +830,11 @@ const clearRoute = () => {
   hasActiveRoute.value = false
   isStepsCollapsed.value = true
   waypointsData.value = [] // 清除途径点数据
+  
+  // 清除高程数据
+  clearElevationData()
+  elevationStats.value = null
+  showElevationData.value = false
 
   emit('route-cleared')
   console.log('路线已清除')
@@ -1135,6 +1321,91 @@ defineExpose({
 
 .error-message.warning .error-text {
   color: #92400e;
+}
+
+/* 高程信息样式 */
+.elevation-info {
+  margin-top: 16px;
+  padding: 12px;
+  background: linear-gradient(135deg, #e8f5e9 0%, #f8f9fa 100%);
+  border-radius: 8px;
+  border: 1px solid #c8e6c9;
+}
+
+.elevation-info h5 {
+  margin: 0 0 12px 0;
+  color: #2c3e50;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.elevation-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.elevation-row {
+  display: flex;
+  gap: 8px;
+}
+
+.elevation-stat {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 6px;
+  border: 1px solid rgba(76, 175, 80, 0.2);
+}
+
+.elevation-label {
+  font-size: 11px;
+  color: #666;
+  font-weight: 500;
+}
+
+.elevation-value {
+  font-size: 12px;
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.elevation-value.climb {
+  color: #f44336;
+}
+
+.elevation-value.descent {
+  color: #4CAF50;
+}
+
+/* 高程加载状态 */
+.elevation-loading {
+  margin-top: 16px;
+  padding: 12px;
+  background: linear-gradient(135deg, #f0f8ff 0%, #f8f9fa 100%);
+  border-radius: 8px;
+  border: 1px solid #bbdefb;
+}
+
+.loading-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #2196F3;
+  font-size: 13px;
+}
+
+.elevation-loading .loading-icon {
+  width: 16px;
+  height: 16px;
+  animation: spin 1s linear infinite;
 }
 
 .route-steps {

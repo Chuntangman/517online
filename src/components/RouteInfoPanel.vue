@@ -95,6 +95,43 @@
             导航规划成功
           </span>
         </div>
+        
+        <!-- 高程信息显示 -->
+        <div v-if="navigationInfo.elevationStats" class="elevation-info">
+          <h5>高程信息</h5>
+          <div class="elevation-stats">
+            <div class="elevation-row">
+              <div class="elevation-stat">
+                <span class="elevation-label">最高海拔:</span>
+                <span class="elevation-value">{{ navigationInfo.elevationStats.maxElevation }}m</span>
+              </div>
+              <div class="elevation-stat">
+                <span class="elevation-label">最低海拔:</span>
+                <span class="elevation-value">{{ navigationInfo.elevationStats.minElevation }}m</span>
+              </div>
+            </div>
+            <div class="elevation-row">
+              <div class="elevation-stat">
+                <span class="elevation-label">平均海拔:</span>
+                <span class="elevation-value">{{ navigationInfo.elevationStats.averageElevation }}m</span>
+              </div>
+              <div class="elevation-stat">
+                <span class="elevation-label">高程差:</span>
+                <span class="elevation-value">{{ navigationInfo.elevationStats.elevationRange }}m</span>
+              </div>
+            </div>
+            <div class="elevation-row">
+              <div class="elevation-stat">
+                <span class="elevation-label">累计爬升:</span>
+                <span class="elevation-value climb">+{{ navigationInfo.elevationStats.totalAscent }}m</span>
+              </div>
+              <div class="elevation-stat">
+                <span class="elevation-label">累计下降:</span>
+                <span class="elevation-value descent">-{{ navigationInfo.elevationStats.totalDescent }}m</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 途径点信息 -->
@@ -583,6 +620,72 @@ defineExpose({
   color: #495057;
   line-height: 1.4;
   display: block;
+}
+
+/* 高程信息样式 */
+.elevation-info {
+  margin-top: 16px;
+  padding: 12px;
+  background: linear-gradient(135deg, #e8f5e9 0%, #f8f9fa 100%);
+  border-radius: 8px;
+  border: 1px solid #c8e6c9;
+}
+
+.elevation-info h5 {
+  margin: 0 0 12px 0;
+  color: #2c3e50;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.elevation-info h5::before {
+  content: '🏔️';
+  font-size: 16px;
+}
+
+.elevation-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.elevation-row {
+  display: flex;
+  gap: 12px;
+}
+
+.elevation-stat {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 6px;
+  border: 1px solid rgba(76, 175, 80, 0.2);
+}
+
+.elevation-label {
+  font-size: 11px;
+  color: #666;
+  font-weight: 500;
+}
+
+.elevation-value {
+  font-size: 12px;
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.elevation-value.climb {
+  color: #f44336;
+}
+
+.elevation-value.descent {
+  color: #4CAF50;
 }
 
 .nav-stats {

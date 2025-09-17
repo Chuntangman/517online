@@ -20,6 +20,16 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,
+      },
+      '/elevation-api': {
+        target: 'https://api.open-elevation.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/elevation-api/, ''),
+        configure: (proxy, options) => {
+          proxy.on('error', (err, req, res) => {
+            console.log('Elevation API proxy error:', err)
+          })
+        }
       }
     }
   }

@@ -1532,9 +1532,13 @@ const toggleNavigation = () => {
 const handleRoutePlanned = (data) => {
   console.log('骑行路线规划完成:', data)
   
-  // 更新导航信息
+  // 更新导航信息，包含高程数据
   if (data.info) {
-    currentNavigationInfo.value = data.info
+    currentNavigationInfo.value = {
+      ...data.info,
+      elevationStats: data.elevationStats || null
+    }
+    console.log('导航信息已更新，包含高程数据:', currentNavigationInfo.value)
   }
   
   // 只有在显示路线信息面板模式下才更新面板，绝不自动显示导航界面

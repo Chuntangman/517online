@@ -18,6 +18,7 @@ const waystationRoutes = require('./routes/waystationRoutes');
 const imageRoutes = require('./routes/imageRoutes');
 const destinationRoutes = require('./routes/destinationRoutes');
 const routeRoutes = require('./routes/routeRoutes');
+const elevationRoutes = require('./routes/elevationRoutes');
 
 // 创建 Express 应用
 const app = express();
@@ -94,6 +95,9 @@ app.use(`${API_PREFIX}/destinations`, destinationRoutes);
 
 // 路线相关路由
 app.use(`${API_PREFIX}/routes`, routeRoutes);
+
+// 高程数据相关路由
+app.use(`${API_PREFIX}/elevation`, elevationRoutes);
 
 /**
  * API 文档路由（开发环境）
