@@ -174,7 +174,7 @@ import { usePopularRoutes } from '@/composables/usePopularRoutes.js'
 const API_BASE_URL = 'http://localhost:3000/api/v1'
 
 // 发射事件到父组件
-const emit = defineEmits(['route-selected', 'route-visualize', 'trajectory-playback'])
+const emit = defineEmits(['route-selected', 'route-visualize', 'trajectory-playback', 'route-navigate-with-markers'])
 
 // 使用热门路线组合式函数
 const { 
@@ -269,27 +269,61 @@ const closeRouteDetail = () => {
 
 // 在地图上查看路线
 const viewRouteOnMap = () => {
+  console.log('=== 点击了在地图上查看路线按钮 ===')
+  console.log('selectedRouteDetail.value:', selectedRouteDetail.value)
+  console.log('canShowOnMap.value:', canShowOnMap.value)
+  
   if (!canShowOnMap.value) {
     console.warn('该路线无法在地图上显示，缺少有效的经纬度信息')
+    console.warn('selectedRouteDetail.value?.waypoints:', selectedRouteDetail.value?.waypoints)
     return
   }
   
-  console.log('在地图上显示路线:', selectedRouteDetail.value)
+  console.log('使用导航功能显示路线:', selectedRouteDetail.value)
   
-  // 发射事件到父组件，传递路线可视化数据
-  emit('route-visualize', {
-    route: selectedRouteDetail.value.route,
-    waypoints: selectedRouteDetail.value.waypoints
+  // 获取有效的途径点
+  const validWaypoints = selectedRouteDetail.value.waypoints.filter(wp => {
+    const hasLng = wp.longitude !== null && wp.longitude !== undefined && wp.longitude !== '';
+    const hasLat = wp.latitude !== null && wp.latitude !== undefined && wp.latitude !== '';
+    const validLng = hasLng && !isNaN(parseFloat(wp.longitude));
+    const validLat = hasLat && !isNaN(parseFloat(wp.latitude));
+    return validLng && validLat;
   })
   
-  // 同时发射原有的route-selected事件保持兼容性
+  if (validWaypoints.length < 2) {
+    console.warn('有效途径点不足，无法使用导航功能')
+    return
+  }
+  
+  // 验证路线数据完整性
+  if (!selectedRouteDetail.value.route) {
+    console.error('路线数据不完整，无法进行导航')
+    alert('路线数据不完整，请重新选择路线')
+    return
+  }
+  
+  // 发射使用导航功能的事件到父组件
+  const routeData = {
+    route: selectedRouteDetail.value.route,
+    waypoints: selectedRouteDetail.value.waypoints,
+    validWaypoints: validWaypoints,
+    startPoint: validWaypoints[0],
+    endPoint: validWaypoints[validWaypoints.length - 1]
+  }
+  
+  console.log('=== 发射 route-navigate-with-markers 事件 ===')
+  console.log('事件数据:', routeData)
+  
+  emit('route-navigate-with-markers', routeData)
+  
+  // 保留原有的route-selected事件以保持兼容性
   emit('route-selected', {
-    id: selectedRouteDetail.value.route.id,
-    title: selectedRouteDetail.value.route.name,
-    region: selectedRouteDetail.value.route.region,
-    distance: selectedRouteDetail.value.route.distance_km ? `${selectedRouteDetail.value.route.distance_km}km` : '未知',
-    duration: selectedRouteDetail.value.route.estimated_days ? `${selectedRouteDetail.value.route.estimated_days}天` : '未知',
-    roadCondition: selectedRouteDetail.value.route.road_condition,
+    id: selectedRouteDetail.value.route?.id,
+    title: selectedRouteDetail.value.route?.name || '未知路线',
+    region: selectedRouteDetail.value.route?.region || '未知',
+    distance: selectedRouteDetail.value.route?.distance_km ? `${selectedRouteDetail.value.route.distance_km}km` : '未知',
+    duration: selectedRouteDetail.value.route?.estimated_days ? `${selectedRouteDetail.value.route.estimated_days}天` : '未知',
+    roadCondition: selectedRouteDetail.value.route?.road_condition || '未知',
     waypoints: selectedRouteDetail.value.waypoints
   })
   
@@ -367,7 +401,7 @@ const startTrajectoryPlayback = () => {
     route: selectedRouteDetail.value.route,
     waypoints: selectedRouteDetail.value.waypoints,
     trajectoryPath: trajectoryPath,
-    name: selectedRouteDetail.value.route.name || '热门路线轨迹'
+    name: selectedRouteDetail.value.route?.name || '热门路线轨迹'
   }
   
   console.log('发射轨迹回放事件:', trajectoryData)

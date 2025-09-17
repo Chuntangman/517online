@@ -341,11 +341,13 @@ onMounted(async () => {
   })
 })
 
-// 暴露方法给父组件
+// 暴露方法和数据给父组件
 defineExpose({
   getWeatherInfo,
   refreshWeather,
-  toggleWeatherInfo
+  toggleWeatherInfo,
+  // 暴露当前天气数据，但不触发新的API调用
+  currentWeather: currentWeather
 })
 </script>
 

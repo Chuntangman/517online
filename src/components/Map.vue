@@ -56,7 +56,8 @@
 
     <!-- 骑行导航组件 -->
     <CyclingNavigation 
-      v-if="showNavigation"
+      v-if="navigationInitialized"
+      v-show="showNavigation"
       :map-instance="mapInstance"
       :visible="showNavigation"
       @route-planned="handleRoutePlanned"
@@ -77,6 +78,20 @@
       @playback-completed="handlePlaybackCompleted"
       ref="trajectoryPlaybackRef"
     />
+
+    <!-- 路线信息面板 -->
+    <RouteInfoPanel
+      v-if="showRouteInfo"
+      :route-data="currentRouteData"
+      :navigation-info="currentNavigationInfo"
+      :visible="showRouteInfo"
+      :current-weather-text="currentWeatherText"
+      :current-policy="currentRoutePolicy"
+      @show-full-navigation="handleShowFullNavigation"
+      @clear-route="handleClearRouteFromPanel"
+      @policy-change="handlePolicyChangeFromPanel"
+      ref="routeInfoPanelRef"
+    />
   </div>
 </template>
 
@@ -85,6 +100,15 @@ import { onMounted, onUnmounted, nextTick, ref, watch } from 'vue'
 import axios from 'axios'
 import CyclingNavigation from './CyclingNavigation.vue'
 import TrajectoryPlayback from './TrajectoryPlayback.vue'
+import RouteInfoPanel from './RouteInfoPanel.vue'
+
+// Props
+const props = defineProps({
+  currentWeatherText: {
+    type: String,
+    default: '获取中...'
+  }
+})
 
 // 当前地图样式
 const currentStyle = ref('fresh')
@@ -105,9 +129,17 @@ const currentRouteMarkers = ref([])
 // 骑行导航相关状态
 const showNavigation = ref(false)
 const cyclingNavigationRef = ref(null)
+// 导航组件是否已初始化（用于隐藏式导航计算）
+const navigationInitialized = ref(false)
 // 轨迹回放相关状态
 const showTrajectory = ref(false)
 const trajectoryPlaybackRef = ref(null)
+// 路线信息面板相关状态
+const showRouteInfo = ref(false)
+const routeInfoPanelRef = ref(null)
+const currentRouteData = ref(null)
+const currentNavigationInfo = ref(null)
+const currentRoutePolicy = ref('0')
 
 // 跳转到指定位置
 const jumpToLocation = (longitude, latitude, markerType = 'waystation') => {
@@ -391,6 +423,7 @@ const createDestinationMarkerContent = () => {
   `
 }
 
+
 // 创建驿站信息窗体内容
 const createInfoWindowContent = (waystation) => {
   const getServiceIcon = (value) => {
@@ -608,6 +641,52 @@ const clearDestinationMarkers = () => {
   console.log('已清除所有目标点标记')
 }
 
+// 根据名称显示常用地点标记（供热门路线使用）
+const showDestinationsByNames = async (waypointNames) => {
+  console.log('根据途径点名称显示常用地点:', waypointNames)
+  
+  if (!mapInstance.value) {
+    console.error('地图实例未初始化，无法显示常用地点')
+    return
+  }
+  
+  if (!waypointNames || waypointNames.length === 0) {
+    console.warn('途径点名称列表为空')
+    return
+  }
+  
+  try {
+    // 如果还没有获取过目标点数据，先获取
+    if (destinations.value.length === 0) {
+      console.log('获取目标点数据...')
+      await fetchDestinations()
+    }
+    
+    // 根据名称筛选匹配的目标点
+    const matchedDestinations = destinations.value.filter(destination => 
+      waypointNames.some(name => {
+        // 支持模糊匹配和精确匹配
+        const destinationName = destination.name?.toLowerCase() || ''
+        const waypointName = name?.toLowerCase() || ''
+        return destinationName.includes(waypointName) || waypointName.includes(destinationName)
+      })
+    )
+    
+    console.log(`找到 ${matchedDestinations.length} 个匹配的常用地点:`, 
+      matchedDestinations.map(d => d.name))
+    
+    // 显示匹配的目标点标记
+    if (matchedDestinations.length > 0) {
+      updateDestinationMarkers(matchedDestinations)
+    } else {
+      console.warn('没有找到匹配的常用地点')
+    }
+    
+  } catch (error) {
+    console.error('根据名称显示常用地点失败:', error)
+  }
+}
+
 // 配置安全密钥
 window._AMapSecurityConfig = {
   securityJsCode: '256b04738eb486d0bcb6a88487921c4f'
@@ -720,6 +799,12 @@ const initMap = async (retryCount = 0, savedCenter = null, savedZoom = null) => 
       // 获取驿站和目标点数据
       await fetchWaystations()
       await fetchDestinations()
+      
+      // 初始化导航组件（隐藏式）
+      navigationInitialized.value = true
+      // 确保导航面板初始状态为隐藏
+      showNavigation.value = false
+      console.log('导航组件已初始化（隐藏式）')
     })
 
     // 保存地图实例
@@ -976,6 +1061,10 @@ const switchMapMode = (mode, filteredData = null) => {
       addMarkersToMap()
     }
     clearDestinationMarkers()
+    // 切换到非热门路线模式时，隐藏路线信息面板
+    if (showRouteInfo.value) {
+      hideAllNavigationPanels()
+    }
   } else if (mode === '常用地点') {
     // 显示目标点标记，清除驿站标记，保留路线
     if (filteredData) {
@@ -986,16 +1075,25 @@ const switchMapMode = (mode, filteredData = null) => {
     // 清除驿站标记
     markers.value.forEach(marker => marker.setMap(null))
     markers.value = []
+    // 切换到非热门路线模式时，隐藏路线信息面板
+    if (showRouteInfo.value) {
+      hideAllNavigationPanels()
+    }
   } else if (mode === '热门路线') {
     // 热门路线模式：清除驿站和目标点标记，只显示路线
     markers.value.forEach(marker => marker.setMap(null))
     markers.value = []
     clearDestinationMarkers()
     // 注意：不清除路线曲线和路线标记，让用户可以继续查看路线
+    // 热门路线模式下，保持路线信息面板的显示状态
   } else {
     // 其他模式默认显示驿站标记
     addMarkersToMap()
     clearDestinationMarkers()
+    // 切换到非热门路线模式时，隐藏路线信息面板
+    if (showRouteInfo.value) {
+      hideAllNavigationPanels()
+    }
   }
 }
 
@@ -1434,8 +1532,17 @@ const toggleNavigation = () => {
 const handleRoutePlanned = (data) => {
   console.log('骑行路线规划完成:', data)
   
-  // 可以在这里添加额外的处理逻辑
-  // 比如显示路线信息、调整地图视角等
+  // 更新导航信息
+  if (data.info) {
+    currentNavigationInfo.value = data.info
+  }
+  
+  // 只有在显示路线信息面板模式下才更新面板，绝不自动显示导航界面
+  if (currentRouteData.value && showRouteInfo.value) {
+    console.log('更新路线信息面板的导航数据')
+    // 确保导航面板保持隐藏状态
+    forceHideNavigation()
+  }
   
   // 发送自定义事件（如果需要通知父组件）
   // emit('cycling-route-planned', data)
@@ -1445,10 +1552,99 @@ const handleRoutePlanned = (data) => {
 const handleRouteCleared = () => {
   console.log('骑行路线已清除')
   
+  // 清除路线信息面板
+  showRouteInfo.value = false
+  currentRouteData.value = null
+  currentNavigationInfo.value = null
+  
   // 可以在这里添加额外的清理逻辑
   
   // 发送自定义事件（如果需要通知父组件）
   // emit('cycling-route-cleared')
+}
+
+// 显示完整导航界面
+const handleShowFullNavigation = () => {
+  console.log('显示完整导航界面')
+  showNavigation.value = true
+  showRouteInfo.value = false
+  console.log('已隐藏RouteInfoPanel，显示完整CyclingNavigation面板')
+}
+
+// 从路线信息面板清除路线
+const handleClearRouteFromPanel = () => {
+  console.log('从路线信息面板清除路线')
+  if (cyclingNavigationRef.value) {
+    cyclingNavigationRef.value.clearRoute()
+  }
+  showRouteInfo.value = false
+  currentRouteData.value = null
+  currentNavigationInfo.value = null
+}
+
+// 处理从路线信息面板发起的策略变更
+const handlePolicyChangeFromPanel = (newPolicy) => {
+  console.log('Map.vue 接收到策略变更请求:', newPolicy)
+  currentRoutePolicy.value = newPolicy
+  
+  // 如果有当前路线数据，重新规划路线
+  if (currentRouteData.value) {
+    console.log('重新规划路线，使用新策略:', newPolicy)
+    rerouteWithNewPolicy(newPolicy)
+  }
+}
+
+// 使用新策略重新规划路线
+const rerouteWithNewPolicy = (newPolicy) => {
+  if (!currentRouteData.value || !cyclingNavigationRef.value) {
+    console.warn('无法重新规划路线：缺少路线数据或导航组件引用')
+    return
+  }
+  
+  try {
+    const { waypoints } = currentRouteData.value
+    if (!waypoints || waypoints.length < 2) {
+      console.warn('路线数据不完整，无法重新规划')
+      return
+    }
+    
+    const startPoint = waypoints[0]
+    const endPoint = waypoints[waypoints.length - 1]
+    const intermediateWaypoints = waypoints.slice(1, -1)
+    
+    // 更新导航组件的策略
+    cyclingNavigationRef.value.updatePolicy(newPolicy)
+    
+    // 设置途径点
+    if (intermediateWaypoints.length > 0) {
+      cyclingNavigationRef.value.setWaypoints(intermediateWaypoints)
+    }
+    
+    // 重新规划路线
+    cyclingNavigationRef.value.searchRouteWithCoordinates(
+      [parseFloat(startPoint.longitude), parseFloat(startPoint.latitude)],
+      [parseFloat(endPoint.longitude), parseFloat(endPoint.latitude)]
+    )
+    
+    console.log('已使用新策略重新规划路线')
+  } catch (error) {
+    console.error('重新规划路线失败:', error)
+  }
+}
+
+// 隐藏所有导航相关面板（供外部调用）
+const hideAllNavigationPanels = () => {
+  console.log('隐藏所有导航相关面板')
+  showNavigation.value = false
+  showRouteInfo.value = false
+  currentRouteData.value = null
+  currentNavigationInfo.value = null
+}
+
+// 强制隐藏导航面板（供内部调用，防止闪现）
+const forceHideNavigation = () => {
+  showNavigation.value = false
+  console.log('强制隐藏导航面板')
 }
 
 // 处理路线步骤高亮事件
@@ -1499,6 +1695,14 @@ const setNavigationEndKeyword = (keyword, city = '北京') => {
   }
 }
 
+// 通过编程方式设置途径点（供外部调用）
+const setNavigationWaypoints = (waypoints) => {
+  if (cyclingNavigationRef.value) {
+    cyclingNavigationRef.value.setWaypoints(waypoints)
+    console.log('设置导航途径点:', waypoints)
+  }
+}
+
 // 开始导航规划（供外部调用）
 const startNavigation = () => {
   if (cyclingNavigationRef.value) {
@@ -1510,6 +1714,7 @@ const startNavigation = () => {
 const clearNavigation = () => {
   if (cyclingNavigationRef.value) {
     cyclingNavigationRef.value.clearRoute()
+    cyclingNavigationRef.value.clearWaypoints()
   }
 }
 
@@ -1761,6 +1966,21 @@ const clearTrajectoryPlayback = () => {
   }
 }
 
+// 显示路线信息面板（供外部调用）
+const showRouteInfoPanel = (routeData) => {
+  console.log('显示路线信息面板:', routeData)
+  // 强制隐藏导航面板，防止任何闪现
+  forceHideNavigation()
+  // 立即设置路线数据和显示面板
+  currentRouteData.value = routeData
+  showRouteInfo.value = true
+  // 双重保险，再次确保导航面板隐藏
+  setTimeout(() => {
+    forceHideNavigation()
+  }, 50)
+  console.log('已确保CyclingNavigation面板完全隐藏，显示简洁RouteInfoPanel')
+}
+
 // 暴露方法给父组件
 defineExpose({
   jumpToLocation,
@@ -1771,6 +1991,7 @@ defineExpose({
   switchMapMode,
   addDestinationMarkersToMap,
   clearDestinationMarkers,
+  showDestinationsByNames,
   drawRouteCurve,
   clearRouteCurve,
   addWaystationsToRoute,
@@ -1781,6 +2002,7 @@ defineExpose({
   setNavigationEnd,
   setNavigationStartKeyword,
   setNavigationEndKeyword,
+  setNavigationWaypoints,
   startNavigation,
   clearNavigation,
   // 轨迹回放相关方法
@@ -1793,7 +2015,10 @@ defineExpose({
   startTrajectoryPlayback,
   pauseTrajectoryPlayback,
   stopTrajectoryPlayback,
-  clearTrajectoryPlayback
+  clearTrajectoryPlayback,
+  // 路线信息面板相关方法
+  showRouteInfoPanel,
+  hideAllNavigationPanels
 })
 </script>
 

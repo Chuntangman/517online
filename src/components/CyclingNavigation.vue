@@ -133,9 +133,13 @@
           <div class="input-group">
             <label>路线策略:</label>
             <select v-model="routePolicy" class="policy-select">
-              <option value="0">推荐路线</option>
-              <option value="1">最短距离</option>
+              <option value="0">推荐路线及最快路线综合 (默认)</option>
+              <option value="1">推荐路线 (平衡距离与路况)</option>
+              <option value="2">最快路线 (优先速度)</option>
             </select>
+            <div class="policy-hint">
+              <span class="hint-text">{{ getPolicyDescription(routePolicy) }}</span>
+            </div>
           </div>
 
           <!-- 操作按钮 -->
@@ -193,14 +197,19 @@
         </div>
 
         <!-- 错误信息显示 -->
-        <div v-if="errorMessage" class="error-message">
+        <div v-if="errorMessage" class="error-message" :class="{ 'warning': errorMessage.includes('注意') }">
           <div class="error-header">
-            <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <svg v-if="errorMessage.includes('注意')" class="warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <svg v-else class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <circle cx="12" cy="12" r="10"/>
               <line x1="15" y1="9" x2="9" y2="15"/>
               <line x1="9" y1="9" x2="15" y2="15"/>
             </svg>
-            <span>规划失败</span>
+            <span>{{ errorMessage.includes('注意') ? '提示信息' : '规划失败' }}</span>
           </div>
           <p class="error-text">{{ errorMessage }}</p>
         </div>
@@ -278,6 +287,9 @@ const routeInfo = ref(null)
 const routeSteps = ref([])
 const errorMessage = ref('')
 
+// 途径点数据
+const waypointsData = ref([])
+
 // 高德地图骑行导航实例
 const ridingInstance = ref(null)
 const routePolyline = ref(null)
@@ -333,10 +345,20 @@ const formatTime = (time) => {
 
 const getPolicyName = (policy) => {
   const policies = {
-    '0': '推荐路线',
-    '1': '最短距离'
+    '0': '推荐路线及最快路线综合',
+    '1': '推荐路线',
+    '2': '最快路线'
   }
-  return policies[policy] || '推荐路线'
+  return policies[policy] || '推荐路线及最快路线综合'
+}
+
+const getPolicyDescription = (policy) => {
+  const descriptions = {
+    '0': '综合考虑路线距离、路况和通行速度，提供平衡的骑行方案',
+    '1': '优先选择适合骑行的道路，平衡距离与路况条件',
+    '2': '以最短时间为目标，优先选择通行速度较快的路线'
+  }
+  return descriptions[policy] || descriptions['0']
 }
 
 // 初始化骑行导航
@@ -377,12 +399,34 @@ const searchRoute = async () => {
   clearError()
   
   try {
-    let startPoint, endPoint
+    let startPoint, endPoint, waypoints = []
 
     if (searchMode.value === 'coordinates') {
       // 经纬度模式
       startPoint = [parseFloat(startCoordinates.value.lng), parseFloat(startCoordinates.value.lat)]
       endPoint = [parseFloat(endCoordinates.value.lng), parseFloat(endCoordinates.value.lat)]
+      
+      // 处理途径点（经纬度格式）
+      if (waypointsData.value && waypointsData.value.length > 0) {
+        console.log('处理经纬度模式途径点:', waypointsData.value)
+        waypoints = waypointsData.value
+          .filter(wp => {
+            const hasCoords = wp && wp.longitude && wp.latitude && 
+                           !isNaN(parseFloat(wp.longitude)) && !isNaN(parseFloat(wp.latitude))
+            console.log(`途径点 ${wp?.name} 坐标验证:`, { 
+              wp, hasCoords, 
+              lng: wp?.longitude, 
+              lat: wp?.latitude 
+            })
+            return hasCoords
+          })
+          .map(wp => {
+            const coords = [parseFloat(wp.longitude), parseFloat(wp.latitude)]
+            console.log(`途径点 ${wp?.name || wp?.id || 'unknown'} 坐标:`, coords)
+            return coords
+          })
+        console.log('最终经纬度途径点:', waypoints)
+      }
     } else {
       // 地点名称模式
       startPoint = {
@@ -393,15 +437,47 @@ const searchRoute = async () => {
         keyword: endKeyword.value.trim(),
         city: endCity.value.trim() || '北京'
       }
+      
+      // 处理途径点（关键字格式）
+      if (waypointsData.value && waypointsData.value.length > 0) {
+        console.log('处理关键字模式途径点:', waypointsData.value)
+        waypoints = waypointsData.value
+          .filter(wp => {
+            const hasName = wp && wp.name && typeof wp.name === 'string' && wp.name.trim()
+            console.log(`途径点 ${wp?.name} 验证:`, { wp, hasName })
+            return hasName
+          })
+          .map(wp => {
+            const result = {
+              keyword: wp.name.trim(),
+              city: (wp.region && wp.region.trim()) || '北京'
+            }
+            console.log(`途径点映射结果:`, result)
+            return result
+          })
+        console.log('最终关键字途径点:', waypoints)
+      }
     }
 
     // 更新路线策略
     ridingInstance.value.setPolicy(parseInt(routePolicy.value))
 
-    // 执行路线搜索
+    // 执行路线搜索 - 暂时跳过途径点功能，先确保基础功能正常
+    if (waypoints.length > 0) {
+      console.log('检测到途径点，但暂时跳过途径点功能，使用起终点直达')
+      console.log('途径点数据:', waypoints)
+      errorMessage.value = '注意：当前版本暂时跳过途径点功能，已规划起终点直达路线'
+    }
+    
+    // 使用基础的起终点搜索
+    console.log('使用基础起终点搜索')
+    console.log('起点:', startPoint)
+    console.log('终点:', endPoint)
+    console.log('搜索模式:', searchMode.value)
+    
     ridingInstance.value.search(startPoint, endPoint, (status, result) => {
       isSearching.value = false
-
+      console.log('基础搜索结果:', { status, result })
       if (status === 'complete' && result.routes && result.routes.length > 0) {
         handleRouteSuccess(result)
       } else {
@@ -451,6 +527,7 @@ const handleRouteError = (result) => {
   errorMessage.value = '未找到合适的骑行路线，请检查起终点是否正确'
   hasActiveRoute.value = false
 }
+
 
 // 解析路线步骤
 const parseRouteSteps = (route) => {
@@ -571,6 +648,7 @@ const clearRoute = () => {
   errorMessage.value = ''
   hasActiveRoute.value = false
   isStepsCollapsed.value = true
+  waypointsData.value = [] // 清除途径点数据
 
   emit('route-cleared')
   console.log('路线已清除')
@@ -612,6 +690,30 @@ onUnmounted(() => {
   console.log('CyclingNavigation 组件已卸载')
 })
 
+// 设置途径点数据
+const setWaypoints = (waypoints) => {
+  console.log('设置途径点数据:', waypoints)
+  waypointsData.value = waypoints || []
+}
+
+// 清除途径点数据
+const clearWaypoints = () => {
+  waypointsData.value = []
+}
+
+const updatePolicy = (policy) => {
+  routePolicy.value = policy
+  console.log('CyclingNavigation 策略已更新为:', policy)
+}
+
+const searchRouteWithCoordinates = (startCoords, endCoords) => {
+  console.log('CyclingNavigation 使用坐标搜索路线:', { startCoords, endCoords })
+  startCoordinates.value = { lng: startCoords[0], lat: startCoords[1] }
+  endCoordinates.value = { lng: endCoords[0], lat: endCoords[1] }
+  searchMode.value = 'coordinates'
+  searchRoute()
+}
+
 // 暴露方法给父组件
 defineExpose({
   searchRoute,
@@ -633,7 +735,11 @@ defineExpose({
     endKeyword.value = keyword
     endCity.value = city
     searchMode.value = 'keyword'
-  }
+  },
+  setWaypoints,
+  clearWaypoints,
+  updatePolicy,
+  searchRouteWithCoordinates
 })
 </script>
 
@@ -837,6 +943,22 @@ defineExpose({
   border-color: #667eea;
 }
 
+.policy-hint {
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border-left: 3px solid #667eea;
+  transition: all 0.3s ease;
+}
+
+.hint-text {
+  font-size: 12px;
+  color: #495057;
+  line-height: 1.4;
+  display: block;
+}
+
 .action-buttons {
   display: flex;
   gap: 8px;
@@ -974,6 +1096,12 @@ defineExpose({
   border-left: 4px solid #e53e3e;
 }
 
+.error-message.warning {
+  background: #fffbeb;
+  border: 1px solid #fed7aa;
+  border-left: 4px solid #f59e0b;
+}
+
 .error-header {
   display: flex;
   align-items: center;
@@ -983,10 +1111,19 @@ defineExpose({
   font-weight: 600;
 }
 
-.error-icon {
+.error-message.warning .error-header {
+  color: #f59e0b;
+}
+
+.error-icon,
+.warning-icon {
   width: 18px;
   height: 18px;
   stroke-width: 2;
+}
+
+.warning-icon {
+  color: #f59e0b;
 }
 
 .error-text {
@@ -994,6 +1131,10 @@ defineExpose({
   color: #c53030;
   font-size: 14px;
   line-height: 1.4;
+}
+
+.error-message.warning .error-text {
+  color: #92400e;
 }
 
 .route-steps {

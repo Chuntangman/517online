@@ -4,7 +4,7 @@
     <main class="main-content">
       <!-- 左侧地图容器 -->
       <div class="map-container">
-        <Map ref="mapRef" />
+        <Map ref="mapRef" :current-weather-text="currentWeatherText" />
         <!-- 天气组件 - 左下角 -->
         <div class="weather-container">
           <Weather 
@@ -41,6 +41,7 @@
             v-show="activeTab === '热门路线'"
             @route-selected="handleRouteSelected"
             @route-visualize="handleRouteVisualize"
+            @route-navigate-with-markers="handleRouteNavigateWithMarkers"
             @trajectory-playback="handleTrajectoryPlayback"
           />
 
@@ -73,7 +74,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onActivated, nextTick } from 'vue'
+import { ref, computed, onMounted, onActivated, nextTick } from 'vue'
 import Map from '@/components/Map.vue'
 import Weather from '@/components/Weather.vue'
 import RouteNavigation from './RouteNavigation.vue'
@@ -103,6 +104,31 @@ const currentLatitude = ref(39.90923)    // 北京纬度
 // 当前筛选数据状态
 const currentFilteredWaystations = ref([])
 const currentFilteredDestinations = ref([])
+
+// 获取当前天气文本（只读取已有数据，不触发API调用）
+const currentWeatherText = computed(() => {
+  try {
+    // 直接读取Weather组件已经加载的天气数据
+    // weatherRef.value.currentWeather 是一个ref对象
+    const weather = weatherRef.value?.currentWeather?.value?.weather
+    if (weather) {
+      console.log('获取到天气数据:', weather)
+      return weather
+    }
+    
+    // 备用方式：直接访问不带.value的方式
+    const weatherAlt = weatherRef.value?.currentWeather?.weather
+    if (weatherAlt) {
+      console.log('备用方式获取到天气数据:', weatherAlt)
+      return weatherAlt
+    }
+    
+    return '获取中...'
+  } catch (error) {
+    console.warn('获取天气数据失败:', error)
+    return '获取中...'
+  }
+})
 
 // 处理标签页切换
 const handleTabChanged = (tab) => {
@@ -216,6 +242,96 @@ const handleRouteVisualize = (routeData) => {
     
   } catch (error) {
     console.error('路线可视化过程中发生错误:', error)
+  }
+}
+
+// 处理使用导航功能显示路线（新方法）
+const handleRouteNavigateWithMarkers = (routeData) => {
+  console.log('=== RouteMain 接收到 route-navigate-with-markers 事件 ===')
+  console.log('接收到路线数据:', routeData)
+  console.log('mapRef.value:', mapRef.value)
+  
+  if (!mapRef.value) {
+    console.error('地图引用未准备就绪')
+    return
+  }
+  
+  try {
+    const { startPoint, endPoint, waypoints, route } = routeData
+    
+    if (!startPoint || !endPoint) {
+      console.error('起点或终点数据不足')
+      console.error('startPoint:', startPoint, 'endPoint:', endPoint)
+      return
+    }
+    
+    if (!route) {
+      console.error('路线信息不存在')
+      return
+    }
+    
+    // 1. 首先确保隐藏所有导航面板，防止闪现
+    if (mapRef.value.hideAllNavigationPanels) {
+      mapRef.value.hideAllNavigationPanels()
+    }
+    
+    // 2. 显示路线信息面板
+    if (mapRef.value.showRouteInfoPanel) {
+      mapRef.value.showRouteInfoPanel(routeData)
+    }
+    
+    // 3. 提取途径点名称，匹配常用地点数据并显示
+    const waypointNames = waypoints.map(wp => wp.name).filter(name => name && name.trim())
+    console.log('途径点名称列表:', waypointNames)
+    
+    if (waypointNames.length > 0 && mapRef.value.showDestinationsByNames) {
+      mapRef.value.showDestinationsByNames(waypointNames)
+    }
+    
+    // 4. 设置导航起点和终点
+    const startLng = parseFloat(startPoint.longitude)
+    const startLat = parseFloat(startPoint.latitude)
+    const endLng = parseFloat(endPoint.longitude)
+    const endLat = parseFloat(endPoint.latitude)
+    
+    // 验证坐标有效性
+    if (isNaN(startLng) || isNaN(startLat) || isNaN(endLng) || isNaN(endLat)) {
+      console.error('坐标数据无效:', { startLng, startLat, endLng, endLat })
+      alert('坐标数据无效，无法进行导航')
+      return
+    }
+    
+    console.log('设置导航起点:', startLng, startLat)
+    console.log('设置导航终点:', endLng, endLat)
+    
+    // 5. 调用地图的导航功能（确保在隐藏状态下进行）
+    if (mapRef.value.setNavigationStart && mapRef.value.setNavigationEnd && mapRef.value.startNavigation) {
+      mapRef.value.setNavigationStart(startLng, startLat)
+      mapRef.value.setNavigationEnd(endLng, endLat)
+      
+      // 6. 设置途径点数据（如果有的话）
+      if (waypoints && waypoints.length > 2 && mapRef.value.setNavigationWaypoints) {
+        // 过滤掉起点和终点，只保留中间的途径点
+        const intermediateWaypoints = waypoints.slice(1, -1)
+        console.log('设置中间途径点:', intermediateWaypoints)
+        mapRef.value.setNavigationWaypoints(intermediateWaypoints)
+      }
+      
+      // 延迟执行导航规划，确保面板状态、起终点和途径点设置完成
+      setTimeout(() => {
+        mapRef.value.startNavigation()
+      }, 100)
+    } else {
+      console.error('地图导航方法不存在')
+    }
+    
+    // 7. 更新天气位置到路线起点
+    updateWeatherLocation(startLng, startLat)
+    console.log('已更新天气位置到路线起点:', startPoint.name)
+    
+  } catch (error) {
+    console.error('使用导航功能显示路线失败:', error)
+    alert('导航功能启动失败: ' + error.message)
   }
 }
 
@@ -382,10 +498,12 @@ const updateWeatherLocation = (longitude, latitude) => {
   currentLongitude.value = longitude
   currentLatitude.value = latitude
   
-  // 通知天气组件更新
-  if (weatherRef.value) {
-    weatherRef.value.getWeatherInfo(longitude, latitude)
-  }
+  // 只更新坐标，不立即调用API获取天气（避免API调用限制）
+  // Weather组件会在适当的时候自动更新天气信息
+  // 如果需要立即更新天气，可以手动调用：
+  // if (weatherRef.value) {
+  //   weatherRef.value.getWeatherInfo(longitude, latitude)
+  // }
 }
 
 // 暴露给父组件的方法和数据
