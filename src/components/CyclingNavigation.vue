@@ -309,7 +309,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['route-planned', 'route-cleared', 'step-highlighted'])
+const emit = defineEmits(['route-planned', 'route-cleared', 'step-highlighted', 'elevation-loading-changed'])
 
 // 响应式数据
 const isPanelCollapsed = ref(false)
@@ -602,6 +602,9 @@ const fetchElevationData = async (route) => {
     console.log('开始获取路线高程数据')
     showElevationData.value = true
     
+    // 发出高程加载开始事件
+    emit('elevation-loading-changed', true)
+    
     // 提取路线坐标
     const coordinates = extractRouteCoordinates(route)
     
@@ -627,6 +630,9 @@ const fetchElevationData = async (route) => {
   } catch (error) {
     console.error('获取高程数据失败:', error)
     elevationStats.value = null
+  } finally {
+    // 发出高程加载结束事件
+    emit('elevation-loading-changed', false)
   }
 }
 

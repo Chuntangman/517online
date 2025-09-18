@@ -486,6 +486,277 @@ class RouteController {
   }
 
   /**
+   * 根据风景评分范围筛选路线
+   * GET /api/v1/routes/scenery-score?min=1&max=10
+   */
+  static async getRoutesBySceneryScore(req, res) {
+    try {
+      const { min, max } = req.query;
+      
+      // 参数验证
+      if (!min || !max) {
+        return res.status(400).json({
+          success: false,
+          message: '缺少必要的风景评分范围参数 (min, max)'
+        });
+      }
+      
+      const minScore = parseInt(min);
+      const maxScore = parseInt(max);
+      
+      if (minScore < 1 || maxScore > 10 || minScore > maxScore) {
+        return res.status(400).json({
+          success: false,
+          message: '风景评分范围必须在1-10之间，且最小值不能大于最大值'
+        });
+      }
+      
+      // 获取符合条件的路线
+      const routes = await RouteModel.getRoutesBySceneryScore({ min: minScore, max: maxScore });
+      
+      res.status(200).json({
+        success: true,
+        message: '按风景评分筛选成功',
+        data: routes,
+        sceneryScoreRange: { min: minScore, max: maxScore },
+        count: routes.length
+      });
+      
+    } catch (error) {
+      console.error('按风景评分筛选路线失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '筛选失败',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
+
+  /**
+   * 根据路况难度评分范围筛选路线
+   * GET /api/v1/routes/difficulty-score?min=1&max=10
+   */
+  static async getRoutesByDifficultyScore(req, res) {
+    try {
+      const { min, max } = req.query;
+      
+      // 参数验证
+      if (!min || !max) {
+        return res.status(400).json({
+          success: false,
+          message: '缺少必要的路况难度评分范围参数 (min, max)'
+        });
+      }
+      
+      const minScore = parseInt(min);
+      const maxScore = parseInt(max);
+      
+      if (minScore < 1 || maxScore > 10 || minScore > maxScore) {
+        return res.status(400).json({
+          success: false,
+          message: '路况难度评分范围必须在1-10之间，且最小值不能大于最大值'
+        });
+      }
+      
+      // 获取符合条件的路线
+      const routes = await RouteModel.getRoutesByDifficultyScore({ min: minScore, max: maxScore });
+      
+      res.status(200).json({
+        success: true,
+        message: '按路况难度评分筛选成功',
+        data: routes,
+        difficultyScoreRange: { min: minScore, max: maxScore },
+        count: routes.length
+      });
+      
+    } catch (error) {
+      console.error('按路况难度评分筛选路线失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '筛选失败',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
+
+  /**
+   * 根据多个条件筛选路线（包含评分条件）
+   * GET /api/v1/routes/filters?region=北京&minDistance=100&maxDistance=500&minDays=1&maxDays=7&minSceneryScore=5&maxSceneryScore=10&minDifficultyScore=1&maxDifficultyScore=5
+   */
+  static async getRoutesByMultipleFilters(req, res) {
+    try {
+      const { 
+        region, 
+        minDistance, maxDistance, 
+        minDays, maxDays,
+        minSceneryScore, maxSceneryScore,
+        minDifficultyScore, maxDifficultyScore,
+        limit, offset 
+      } = req.query;
+      
+      // 构建筛选条件
+      const filters = {};
+      
+      if (region) {
+        filters.region = region;
+      }
+      
+      if (minDistance && maxDistance) {
+        const minDist = parseInt(minDistance);
+        const maxDist = parseInt(maxDistance);
+        if (minDist >= 0 && maxDist >= 0 && minDist <= maxDist) {
+          filters.distanceRange = { min: minDist, max: maxDist };
+        }
+      }
+      
+      if (minDays && maxDays) {
+        const minD = parseFloat(minDays);
+        const maxD = parseFloat(maxDays);
+        if (minD >= 0 && maxD >= 0 && minD <= maxD) {
+          filters.daysRange = { min: minD, max: maxD };
+        }
+      }
+      
+      if (minSceneryScore && maxSceneryScore) {
+        const minS = parseInt(minSceneryScore);
+        const maxS = parseInt(maxSceneryScore);
+        if (minS >= 1 && maxS <= 10 && minS <= maxS) {
+          filters.sceneryScoreRange = { min: minS, max: maxS };
+        }
+      }
+      
+      if (minDifficultyScore && maxDifficultyScore) {
+        const minD = parseInt(minDifficultyScore);
+        const maxD = parseInt(maxDifficultyScore);
+        if (minD >= 1 && maxD <= 10 && minD <= maxD) {
+          filters.difficultyScoreRange = { min: minD, max: maxD };
+        }
+      }
+      
+      if (limit) {
+        const limitNum = parseInt(limit);
+        if (limitNum > 0 && limitNum <= 100) {
+          filters.limit = limitNum;
+        }
+      }
+      
+      if (offset) {
+        const offsetNum = parseInt(offset);
+        if (offsetNum >= 0) {
+          filters.offset = offsetNum;
+        }
+      }
+      
+      // 获取符合条件的路线
+      const routes = await RouteModel.getRoutesByMultipleFilters(filters);
+      
+      res.status(200).json({
+        success: true,
+        message: '多条件筛选成功',
+        data: routes,
+        filters: filters,
+        count: routes.length
+      });
+      
+    } catch (error) {
+      console.error('多条件筛选路线失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '筛选失败',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
+
+  /**
+   * 智能匹配路线
+   * POST /api/v1/routes/smart-match
+   */
+  static async getSmartMatchedRoutes(req, res) {
+    try {
+      const { 
+        difficulty, 
+        sceneryPriority, 
+        cyclingType, 
+        days, 
+        weatherScore,
+        limit 
+      } = req.body;
+
+      // 参数验证
+      if (difficulty !== undefined && (difficulty < 1 || difficulty > 10)) {
+        return res.status(400).json({
+          success: false,
+          message: '难易度参数必须在1-10之间'
+        });
+      }
+
+      if (sceneryPriority !== undefined && (sceneryPriority < 1 || sceneryPriority > 10)) {
+        return res.status(400).json({
+          success: false,
+          message: '风景优先级参数必须在1-10之间'
+        });
+      }
+
+      if (cyclingType && !['休闲', '自由', '挑战'].includes(cyclingType)) {
+        return res.status(400).json({
+          success: false,
+          message: '骑行类型必须是：休闲、自由、挑战之一'
+        });
+      }
+
+      if (days !== undefined && (days < 1 || days > 15)) {
+        return res.status(400).json({
+          success: false,
+          message: '骑行天数必须在1-15之间'
+        });
+      }
+
+      if (weatherScore !== undefined && (weatherScore < 3 || weatherScore > 9)) {
+        return res.status(400).json({
+          success: false,
+          message: '天气评分必须在3-9之间'
+        });
+      }
+
+      // 调用模型方法进行智能匹配
+      const matchedRoutes = await RouteModel.getSmartMatchedRoutes({
+        difficulty,
+        sceneryPriority,
+        cyclingType,
+        days,
+        weatherScore,
+        limit: limit || 10
+      });
+
+      // 返回匹配结果
+      res.status(200).json({
+        success: true,
+        message: '智能匹配成功',
+        data: {
+          routes: matchedRoutes,
+          matchParams: {
+            difficulty: difficulty || 5,
+            sceneryPriority: sceneryPriority || 5,
+            cyclingType: cyclingType || '自由',
+            days: days || 3,
+            weatherScore: weatherScore || 6
+          }
+        },
+        count: matchedRoutes.length
+      });
+
+    } catch (error) {
+      console.error('智能匹配路线失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '智能匹配失败',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
+
+  /**
    * 获取路线的途径点详情
    * GET /api/v1/routes/:id/waypoints
    */

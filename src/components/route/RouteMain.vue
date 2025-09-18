@@ -32,6 +32,8 @@
           <RoutePlanning 
             v-show="activeTab === '路线规划'"
             @route-generated="handleRouteGenerated"
+            @route-selected="handleRouteSelected"
+            @trajectory-playback="handleTrajectoryPlayback"
             @start-point-changed="handleStartPointChanged"
             @end-point-changed="handleEndPointChanged"
           />
@@ -201,7 +203,28 @@ const handleEndPointChanged = (endPoint) => {
 // 处理路线选择
 const handleRouteSelected = (route) => {
   console.log('选择路线:', route)
-  // 这里可以添加路线选择后的处理逻辑
+  
+  // 构建路线数据用于显示路线信息面板
+  const routeData = {
+    route: {
+      id: route.id,
+      name: route.title,
+      region: route.region,
+      distance_km: parseInt(route.distance) || 0,
+      estimated_days: parseInt(route.duration) || 0,
+      road_condition: route.roadCondition,
+      remarks: route.remarks,
+      precautions: route.precautions
+    },
+    waypoints: route.waypoints || []
+  }
+  
+  console.log('显示路线信息面板，路线数据:', routeData)
+  
+  // 显示路线信息面板（这会触发高程数据获取）
+  if (mapRef.value && mapRef.value.showRouteInfoPanel) {
+    mapRef.value.showRouteInfoPanel(routeData)
+  }
 }
 
 // 处理路线可视化

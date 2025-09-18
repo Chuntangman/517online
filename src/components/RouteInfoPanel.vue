@@ -132,6 +132,21 @@
             </div>
           </div>
         </div>
+        
+        <!-- 高程加载状态 -->
+        <div v-else-if="elevationLoading" class="elevation-loading">
+          <h5>高程信息</h5>
+          <div class="loading-content">
+            <svg class="loading-spinner" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" opacity="0.25"/>
+              <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"/>
+            </svg>
+            <span class="loading-text">正在获取高程数据...</span>
+          </div>
+          <div class="loading-hint">
+            <span class="hint-text">🏔️ 正在分析路线海拔信息，请稍候</span>
+          </div>
+        </div>
       </div>
 
       <!-- 途径点信息 -->
@@ -311,6 +326,10 @@ const props = defineProps({
   currentPolicy: {
     type: String,
     default: '0'
+  },
+  elevationLoading: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -686,6 +705,67 @@ defineExpose({
 
 .elevation-value.descent {
   color: #4CAF50;
+}
+
+/* 高程加载状态样式 */
+.elevation-loading {
+  margin-top: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, #f0f8ff 0%, #f8f9fa 100%);
+  border-radius: 8px;
+  border: 1px solid #bbdefb;
+  text-align: center;
+}
+
+.elevation-loading h5 {
+  margin: 0 0 12px 0;
+  color: #2c3e50;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.loading-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  color: #2196F3;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+}
+
+.loading-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #2196F3;
+}
+
+.loading-hint {
+  padding: 8px 12px;
+  background: rgba(33, 150, 243, 0.1);
+  border-radius: 6px;
+  border-left: 3px solid #2196F3;
+}
+
+.loading-hint .hint-text {
+  font-size: 12px;
+  color: #1976D2;
+  line-height: 1.4;
+  display: block;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .nav-stats {

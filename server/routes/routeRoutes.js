@@ -138,6 +138,65 @@ router.get('/popular',
 );
 
 /**
+ * @route   GET /api/v1/routes/scenery-score
+ * @desc    根据风景评分范围筛选路线
+ * @access  Public
+ * @params  ?min=1&max=10
+ */
+router.get('/scenery-score',
+  [
+    query('min').notEmpty().isInt({ min: 1, max: 10 }).withMessage('min 必须是 1-10 之间的整数'),
+    query('max').notEmpty().isInt({ min: 1, max: 10 }).withMessage('max 必须是 1-10 之间的整数')
+  ],
+  RouteController.getRoutesBySceneryScore
+);
+
+/**
+ * @route   GET /api/v1/routes/difficulty-score
+ * @desc    根据路况难度评分范围筛选路线
+ * @access  Public
+ * @params  ?min=1&max=10
+ */
+router.get('/difficulty-score',
+  [
+    query('min').notEmpty().isInt({ min: 1, max: 10 }).withMessage('min 必须是 1-10 之间的整数'),
+    query('max').notEmpty().isInt({ min: 1, max: 10 }).withMessage('max 必须是 1-10 之间的整数')
+  ],
+  RouteController.getRoutesByDifficultyScore
+);
+
+/**
+ * @route   GET /api/v1/routes/filters
+ * @desc    根据多个条件筛选路线（包含评分条件）
+ * @access  Public
+ * @params  ?region=北京&minDistance=100&maxDistance=500&minDays=1&maxDays=7&minSceneryScore=5&maxSceneryScore=10&minDifficultyScore=1&maxDifficultyScore=5
+ */
+router.get('/filters',
+  [
+    query('region').optional().isString().isLength({ min: 1, max: 50 }).withMessage('region 长度必须在 1-50 字符之间'),
+    query('minDistance').optional().isInt({ min: 0 }).withMessage('minDistance 必须是非负整数'),
+    query('maxDistance').optional().isInt({ min: 0 }).withMessage('maxDistance 必须是非负整数'),
+    query('minDays').optional().isFloat({ min: 0 }).withMessage('minDays 必须是非负数'),
+    query('maxDays').optional().isFloat({ min: 0 }).withMessage('maxDays 必须是非负数'),
+    query('minSceneryScore').optional().isInt({ min: 1, max: 10 }).withMessage('minSceneryScore 必须是 1-10 之间的整数'),
+    query('maxSceneryScore').optional().isInt({ min: 1, max: 10 }).withMessage('maxSceneryScore 必须是 1-10 之间的整数'),
+    query('minDifficultyScore').optional().isInt({ min: 1, max: 10 }).withMessage('minDifficultyScore 必须是 1-10 之间的整数'),
+    query('maxDifficultyScore').optional().isInt({ min: 1, max: 10 }).withMessage('maxDifficultyScore 必须是 1-10 之间的整数'),
+    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit 必须是 1-100 之间的整数'),
+    query('offset').optional().isInt({ min: 0 }).withMessage('offset 必须是非负整数')
+  ],
+  RouteController.getRoutesByMultipleFilters
+);
+
+/**
+ * @route   POST /api/v1/routes/smart-match
+ * @desc    智能匹配路线
+ * @access  Public
+ * @body    { difficulty, sceneryPriority, cyclingType, days, weatherScore, limit }
+ */
+router.post('/smart-match', RouteController.getSmartMatchedRoutes);
+
+/**
  * @route   GET /api/v1/routes/statistics
  * @desc    获取路线统计信息
  * @access  Public

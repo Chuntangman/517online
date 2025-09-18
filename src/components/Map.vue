@@ -63,6 +63,7 @@
       @route-planned="handleRoutePlanned"
       @route-cleared="handleRouteCleared"
       @step-highlighted="handleStepHighlighted"
+      @elevation-loading-changed="handleElevationLoadingChanged"
       ref="cyclingNavigationRef"
     />
 
@@ -87,6 +88,7 @@
       :visible="showRouteInfo"
       :current-weather-text="currentWeatherText"
       :current-policy="currentRoutePolicy"
+      :elevation-loading="elevationLoading"
       @show-full-navigation="handleShowFullNavigation"
       @clear-route="handleClearRouteFromPanel"
       @policy-change="handlePolicyChangeFromPanel"
@@ -101,6 +103,7 @@ import axios from 'axios'
 import CyclingNavigation from './CyclingNavigation.vue'
 import TrajectoryPlayback from './TrajectoryPlayback.vue'
 import RouteInfoPanel from './RouteInfoPanel.vue'
+import { useElevation } from '@/composables/useElevation'
 
 // Props
 const props = defineProps({
@@ -137,9 +140,16 @@ const trajectoryPlaybackRef = ref(null)
 // 路线信息面板相关状态
 const showRouteInfo = ref(false)
 const routeInfoPanelRef = ref(null)
+const elevationLoading = ref(false)
 const currentRouteData = ref(null)
 const currentNavigationInfo = ref(null)
 const currentRoutePolicy = ref('0')
+
+// 高程数据功能
+const { 
+  getElevationForRoute, 
+  calculateElevationStats 
+} = useElevation()
 
 // 跳转到指定位置
 const jumpToLocation = (longitude, latitude, markerType = 'waystation') => {
@@ -1659,6 +1669,82 @@ const handleStepHighlighted = (data) => {
   // 比如在地图上高亮显示该步骤的路径
 }
 
+// 处理高程加载状态变化
+const handleElevationLoadingChanged = (loading) => {
+  elevationLoading.value = loading
+  console.log('高程加载状态变化:', loading)
+}
+
+// 为路线信息面板获取高程数据
+const fetchElevationForRouteInfo = async (routeData) => {
+  try {
+    console.log('开始为路线信息面板获取高程数据')
+    elevationLoading.value = true
+    
+    // 从路线数据中提取坐标
+    const coordinates = extractCoordinatesFromRouteData(routeData)
+    
+    if (coordinates.length === 0) {
+      console.warn('无法从路线数据中提取坐标，跳过高程数据获取')
+      return
+    }
+    
+    console.log(`提取到 ${coordinates.length} 个坐标点`)
+    
+    // 获取高程数据
+    const elevationResults = await getElevationForRoute(coordinates)
+    
+    if (elevationResults && elevationResults.length > 0) {
+      // 计算高程统计信息
+      const elevationStats = calculateElevationStats(elevationResults)
+      console.log('高程数据获取成功:', elevationStats)
+      
+      // 更新导航信息，包含高程数据
+      currentNavigationInfo.value = {
+        ...currentNavigationInfo.value,
+        elevationStats: elevationStats
+      }
+    } else {
+      console.warn('未获取到有效的高程数据')
+    }
+    
+  } catch (error) {
+    console.error('获取高程数据失败:', error)
+  } finally {
+    elevationLoading.value = false
+  }
+}
+
+// 从路线数据中提取坐标点
+const extractCoordinatesFromRouteData = (routeData) => {
+  const coordinates = []
+  
+  try {
+    if (routeData.waypoints && Array.isArray(routeData.waypoints)) {
+      routeData.waypoints.forEach((waypoint, index) => {
+        if (waypoint.longitude && waypoint.latitude) {
+          const lng = parseFloat(waypoint.longitude)
+          const lat = parseFloat(waypoint.latitude)
+          
+          if (!isNaN(lng) && !isNaN(lat)) {
+            coordinates.push({
+              lng: lng,
+              lat: lat,
+              name: waypoint.name || `点${index + 1}`
+            })
+          }
+        }
+      })
+    }
+    
+    console.log(`从路线数据提取到 ${coordinates.length} 个有效坐标`)
+  } catch (error) {
+    console.error('提取路线坐标失败:', error)
+  }
+  
+  return coordinates
+}
+
 // 通过编程方式设置导航起点（供外部调用）
 const setNavigationStart = (longitude, latitude) => {
   if (cyclingNavigationRef.value) {
@@ -1971,13 +2057,26 @@ const clearTrajectoryPlayback = () => {
 }
 
 // 显示路线信息面板（供外部调用）
-const showRouteInfoPanel = (routeData) => {
+const showRouteInfoPanel = async (routeData) => {
   console.log('显示路线信息面板:', routeData)
   // 强制隐藏导航面板，防止任何闪现
   forceHideNavigation()
   // 立即设置路线数据和显示面板
   currentRouteData.value = routeData
   showRouteInfo.value = true
+  
+  // 初始化导航信息（为高程数据准备）
+  if (routeData.route) {
+    currentNavigationInfo.value = {
+      distance: routeData.route.distance_km ? `${routeData.route.distance_km}km` : '未知',
+      time: routeData.route.estimated_days ? `${routeData.route.estimated_days}天` : '未知',
+      elevationStats: null // 将由高程获取函数填充
+    }
+  }
+  
+  // 获取高程数据
+  await fetchElevationForRouteInfo(routeData)
+  
   // 双重保险，再次确保导航面板隐藏
   setTimeout(() => {
     forceHideNavigation()
