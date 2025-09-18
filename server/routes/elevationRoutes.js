@@ -50,6 +50,7 @@ router.get('/lookup', async (req, res) => {
 })
 
 // 批量高程查询
+// 接收WGS-84坐标系的坐标数组（前端已转换）
 router.post('/batch', async (req, res) => {
   try {
     const { coordinates } = req.body
@@ -61,7 +62,7 @@ router.post('/batch', async (req, res) => {
       })
     }
 
-    console.log(`批量高程查询，坐标数量: ${coordinates.length}`)
+    console.log(`批量高程查询（WGS-84坐标），坐标数量: ${coordinates.length}`)
 
     const results = []
     

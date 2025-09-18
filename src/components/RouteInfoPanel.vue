@@ -131,6 +131,14 @@
               </div>
             </div>
           </div>
+          
+          <!-- 高程折线图 -->
+          <div class="elevation-chart-section">
+            <ElevationChart 
+              :elevation-data="navigationInfo.elevationData || []"
+              :loading="elevationLoading"
+            />
+          </div>
         </div>
         
         <!-- 高程加载状态 -->
@@ -304,6 +312,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import ElevationChart from './ElevationChart.vue'
 
 // Props
 const props = defineProps({
@@ -705,6 +714,13 @@ defineExpose({
 
 .elevation-value.descent {
   color: #4CAF50;
+}
+
+/* 高程图表区域 */
+.elevation-chart-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(76, 175, 80, 0.2);
 }
 
 /* 高程加载状态样式 */

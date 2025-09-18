@@ -142,6 +142,41 @@
             </div>
           </div>
 
+          <!-- 高程采样模式选择 -->
+          <div class="input-group">
+            <label>高程精度:</label>
+            <div class="sampling-mode-selector">
+              <label class="sampling-option">
+                <input 
+                  type="radio" 
+                  :value="true" 
+                  v-model="enableSmartSampling"
+                  name="samplingMode"
+                />
+                <span class="radio-custom"></span>
+                <span class="option-text">智能采样 (推荐)</span>
+              </label>
+              <label class="sampling-option">
+                <input 
+                  type="radio" 
+                  :value="false" 
+                  v-model="enableSmartSampling"
+                  name="samplingMode"
+                />
+                <span class="radio-custom"></span>
+                <span class="option-text">均匀采样</span>
+              </label>
+            </div>
+            <div class="sampling-hint">
+              <span class="hint-text">
+                {{ enableSmartSampling 
+                  ? '智能识别地形特征点，更准确反映山峰谷底变化' 
+                  : '等间距选择采样点，处理速度更快' 
+                }}
+              </span>
+            </div>
+          </div>
+
           <!-- 操作按钮 -->
           <div class="action-buttons">
             <button 
@@ -331,6 +366,9 @@ const endCity = ref('北京')
 // 路线策略
 const routePolicy = ref('0') // '0': 推荐路线, '1': 最短距离
 
+// 高程采样模式
+const enableSmartSampling = ref(true) // 默认启用智能采样
+
 // 路线信息
 const routeInfo = ref(null)
 const routeSteps = ref([])
@@ -343,12 +381,12 @@ const waypointsData = ref([])
 const { 
   isLoading: elevationLoading, 
   error: elevationError, 
-  elevationData, 
   getElevationForRoute, 
   calculateElevationStats, 
   clearElevationData 
 } = useElevation()
 const elevationStats = ref(null)
+const elevationData = ref([]) // 保存原始高程数据用于图表
 const showElevationData = ref(false)
 
 // 高德地图骑行导航实例
@@ -580,7 +618,8 @@ const handleRouteSuccess = async (result) => {
     route: route,
     info: routeInfo.value,
     steps: routeSteps.value,
-    elevationStats: elevationStats.value
+    elevationStats: elevationStats.value,
+    elevationData: elevationData.value // 添加原始高程数据
   })
 
   console.log('路线规划成功:', routeInfo.value)
@@ -608,27 +647,32 @@ const fetchElevationData = async (route) => {
     // 提取路线坐标
     const coordinates = extractRouteCoordinates(route)
     
-    if (coordinates.length === 0) {
-      console.warn('无法提取路线坐标，跳过高程数据获取')
-      return
-    }
+    console.log(`提取到 ${coordinates.length} 个GCJ-02坐标点`)
     
-    console.log(`提取到 ${coordinates.length} 个坐标点`)
-    
-    // 获取高程数据
-    const elevationResults = await getElevationForRoute(coordinates)
+    // 获取高程数据（自动进行坐标转换）
+    const elevationResults = await getElevationForRoute(coordinates, 18, enableSmartSampling.value)
     
     if (elevationResults && elevationResults.length > 0) {
+      // 保存原始高程数据
+      elevationData.value = elevationResults
       // 计算高程统计信息
       elevationStats.value = calculateElevationStats(elevationResults)
       console.log('高程数据获取成功:', elevationStats.value)
     } else {
       console.warn('未获取到有效的高程数据')
+      elevationData.value = []
       elevationStats.value = null
     }
     
   } catch (error) {
     console.error('获取高程数据失败:', error)
+    // 设置错误信息，让用户知道高程数据获取失败
+    if (error.message && error.message.includes('坐标数据不足')) {
+      errorMessage.value = '路线数据异常：' + error.message
+    } else {
+      errorMessage.value = '高程数据获取失败：' + error.message
+    }
+    elevationData.value = []
     elevationStats.value = null
   } finally {
     // 发出高程加载结束事件
@@ -670,46 +714,14 @@ const extractRouteCoordinates = (route) => {
       console.log(`从route.rides.path提取到 ${coordinates.length} 个坐标`)
     }
     
-    // 方法3: 如果没有足够的坐标，使用起终点和途径点
+    // 验证是否获取到足够的坐标点
     if (coordinates.length < 2) {
-      console.log('路径坐标不足，使用起终点和途径点数据')
-      
-      // 添加起点
-      if (searchMode.value === 'coordinates') {
-        coordinates.push({
-          lng: parseFloat(startCoordinates.value.lng),
-          lat: parseFloat(startCoordinates.value.lat),
-          name: '起点'
-        })
-      }
-      
-      // 添加途径点
-      if (waypointsData.value && waypointsData.value.length > 0) {
-        waypointsData.value.forEach((wp, index) => {
-          if (wp.longitude && wp.latitude) {
-            coordinates.push({
-              lng: parseFloat(wp.longitude),
-              lat: parseFloat(wp.latitude),
-              name: wp.name || `途径点${index + 1}`
-            })
-          }
-        })
-      }
-      
-      // 添加终点
-      if (searchMode.value === 'coordinates') {
-        coordinates.push({
-          lng: parseFloat(endCoordinates.value.lng),
-          lat: parseFloat(endCoordinates.value.lat),
-          name: '终点'
-        })
-      }
-      
-      console.log(`使用起终点和途径点，共 ${coordinates.length} 个坐标`)
+      throw new Error(`路线坐标数据不足，仅获取到 ${coordinates.length} 个坐标点，无法进行高程分析`)
     }
     
   } catch (error) {
     console.error('提取路线坐标失败:', error)
+    throw error // 重新抛出错误，让上层处理
   }
   
   return coordinates
@@ -839,6 +851,7 @@ const clearRoute = () => {
   
   // 清除高程数据
   clearElevationData()
+  elevationData.value = []
   elevationStats.value = null
   showElevationData.value = false
 
@@ -1135,7 +1148,8 @@ defineExpose({
   border-color: #667eea;
 }
 
-.policy-hint {
+.policy-hint,
+.sampling-hint {
   margin-top: 6px;
   padding: 8px 12px;
   background: #f8f9fa;
@@ -1149,6 +1163,71 @@ defineExpose({
   color: #495057;
   line-height: 1.4;
   display: block;
+}
+
+/* 采样模式选择器样式 */
+.sampling-mode-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.sampling-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 2px solid #e1e5e9;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: white;
+}
+
+.sampling-option:hover {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.05);
+}
+
+.sampling-option input[type="radio"] {
+  display: none;
+}
+
+.radio-custom {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e1e5e9;
+  border-radius: 50%;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.sampling-option input[type="radio"]:checked + .radio-custom {
+  border-color: #667eea;
+  background: #667eea;
+}
+
+.sampling-option input[type="radio"]:checked + .radio-custom::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: white;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.option-text {
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+}
+
+.sampling-option input[type="radio"]:checked ~ .option-text {
+  color: #667eea;
 }
 
 .action-buttons {

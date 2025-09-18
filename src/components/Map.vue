@@ -1678,8 +1678,25 @@ const handleElevationLoadingChanged = (loading) => {
 // 为路线信息面板获取高程数据
 const fetchElevationForRouteInfo = async (routeData) => {
   try {
-    console.log('开始为路线信息面板获取高程数据')
+    console.log('开始为路线信息面板准备高程数据')
     elevationLoading.value = true
+    
+    // 优先检查是否已有高程数据（避免重复获取）
+    if (routeData.elevationStats && routeData.elevationData && routeData.elevationData.length > 0) {
+      console.log('使用已有的高程数据，避免重复请求API')
+      console.log('已有高程统计:', routeData.elevationStats)
+      console.log('已有高程数据点数:', routeData.elevationData.length)
+      
+      // 直接使用已有数据
+      currentNavigationInfo.value = {
+        ...currentNavigationInfo.value,
+        elevationStats: routeData.elevationStats,
+        elevationData: routeData.elevationData
+      }
+      return
+    }
+    
+    console.log('未找到已有高程数据，开始重新获取')
     
     // 从路线数据中提取坐标
     const coordinates = extractCoordinatesFromRouteData(routeData)
@@ -1691,8 +1708,8 @@ const fetchElevationForRouteInfo = async (routeData) => {
     
     console.log(`提取到 ${coordinates.length} 个坐标点`)
     
-    // 获取高程数据
-    const elevationResults = await getElevationForRoute(coordinates)
+    // 获取高程数据（使用智能采样）
+    const elevationResults = await getElevationForRoute(coordinates, 18, true)
     
     if (elevationResults && elevationResults.length > 0) {
       // 计算高程统计信息
@@ -1702,7 +1719,8 @@ const fetchElevationForRouteInfo = async (routeData) => {
       // 更新导航信息，包含高程数据
       currentNavigationInfo.value = {
         ...currentNavigationInfo.value,
-        elevationStats: elevationStats
+        elevationStats: elevationStats,
+        elevationData: elevationResults // 添加原始高程数据用于图表显示
       }
     } else {
       console.warn('未获取到有效的高程数据')
