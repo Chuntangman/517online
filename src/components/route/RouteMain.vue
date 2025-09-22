@@ -45,6 +45,7 @@
             @route-visualize="handleRouteVisualize"
             @route-navigate-with-markers="handleRouteNavigateWithMarkers"
             @trajectory-playback="handleTrajectoryPlayback"
+            @clear-previous-displays="handleClearPreviousDisplays"
           />
 
           <!-- 驿站服务展示 -->
@@ -279,6 +280,10 @@ const handleRouteNavigateWithMarkers = (routeData) => {
     return
   }
   
+  // 首先清除之前的显示内容（轨迹回放等）
+  console.log('清除之前的显示内容...')
+  handleClearPreviousDisplays()
+  
   try {
     const { startPoint, endPoint, waypoints, route } = routeData
     
@@ -369,6 +374,10 @@ const handleTrajectoryPlayback = (trajectoryData) => {
   }
   
   try {
+    // 首先清除之前的所有显示内容
+    console.log('轨迹回放前清除之前的显示内容...')
+    handleClearPreviousDisplays()
+    
     const { trajectoryPath, name } = trajectoryData
     
     if (!trajectoryPath || trajectoryPath.length < 2) {
@@ -394,6 +403,53 @@ const handleTrajectoryPlayback = (trajectoryData) => {
   } catch (error) {
     console.error('轨迹回放失败:', error)
     alert('轨迹回放失败: ' + error.message)
+  }
+}
+
+// 处理清除之前的显示内容
+const handleClearPreviousDisplays = () => {
+  console.log('=== RouteMain 清除之前的显示内容 ===')
+  
+  if (!mapRef.value) {
+    console.warn('地图引用未准备就绪')
+    return
+  }
+  
+  try {
+    // 清除轨迹回放
+    if (mapRef.value.clearDirectTrajectoryPlayback) {
+      mapRef.value.clearDirectTrajectoryPlayback()
+      console.log('已清除轨迹回放')
+    }
+    
+    // 清除路线曲线
+    if (mapRef.value.clearRouteCurve) {
+      mapRef.value.clearRouteCurve()
+      console.log('已清除路线曲线')
+    }
+    
+    // 清除导航路径（包括CyclingNavigation绘制的路线）
+    if (mapRef.value.clearNavigation) {
+      mapRef.value.clearNavigation()
+      console.log('已清除导航路径')
+    }
+    
+    // 额外清除目标点标记（常用地点显示）
+    if (mapRef.value.clearDestinationMarkers) {
+      mapRef.value.clearDestinationMarkers()
+      console.log('已清除目标点标记')
+    }
+    
+    // 隐藏所有导航面板
+    if (mapRef.value.hideAllNavigationPanels) {
+      mapRef.value.hideAllNavigationPanels()
+      console.log('已隐藏所有导航面板')
+    }
+    
+    console.log('清除之前的显示内容完成')
+    
+  } catch (error) {
+    console.error('清除之前的显示内容失败:', error)
   }
 }
 
@@ -565,13 +621,30 @@ defineExpose({
   height: calc(100vh - 40px);
   background-color: rgba(255, 255, 255, 0.95);
   position: relative;
-  overflow: hidden;
+  overflow: hidden; /* 保持地图内容不溢出 */
   border-radius: 16px;
   box-shadow: 
     0 4px 20px rgba(0, 0, 0, 0.05),
     0 8px 32px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(4px);
+}
+
+/* 确保轨迹回放组件在容器内正确显示 */
+.map-container :deep(.trajectory-playback) {
+  z-index: 1500 !important;
+}
+
+.map-container :deep(.demo-title) {
+  z-index: 1600 !important;
+}
+
+.map-container :deep(.main-control) {
+  z-index: 1600 !important;
+}
+
+.map-container :deep(.speed-selector-bottom) {
+  z-index: 1600 !important;
 }
 
 /* 天气组件容器 */

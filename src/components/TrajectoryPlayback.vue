@@ -1,240 +1,46 @@
 <template>
   <div class="trajectory-playback">
-    <!-- 轨迹回放控制面板 -->
-    <div class="playback-panel" :class="{ 'collapsed': isPanelCollapsed }">
-      <!-- 面板头部 -->
-      <div class="panel-header">
-        <h3 class="panel-title">
-          <svg class="title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <polygon points="5,3 19,12 5,21"/>
-          </svg>
-          轨迹回放
-        </h3>
-        <button 
-          class="collapse-btn" 
-          @click="togglePanel"
-          :title="isPanelCollapsed ? '展开面板' : '收起面板'"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <polyline :points="isPanelCollapsed ? '9,18 15,12 9,6' : '15,18 9,12 15,6'"/>
-          </svg>
-        </button>
+    <!-- 标题显示 -->
+    <div class="demo-title">
+      <h1>镜头--{{ currentTrajectoryName }}</h1>
+      <h3>使用轨迹追踪能力追踪导航路径</h3>
       </div>
 
-      <!-- 面板内容 -->
-      <div class="panel-content" v-show="!isPanelCollapsed">
-        <!-- 轨迹数据输入 -->
-        <div class="trajectory-form">
-          <div class="input-group">
-            <label>轨迹数据输入方式:</label>
-            <div class="input-mode-buttons">
+    <!-- 主控制按钮 - 右下角 -->
+    <div class="main-control">
               <button 
-                class="mode-btn" 
-                :class="{ active: inputMode === 'preset' }"
-                @click="setInputMode('preset')"
-              >
-                预设轨迹
+        class="start-btn" 
+        @click="toggleTracking"
+        :disabled="!canStartTracking"
+      >
+        {{ isTracking ? '停止镜头追踪' : '开始镜头追踪' }}
               </button>
-              <button 
-                class="mode-btn" 
-                :class="{ active: inputMode === 'custom' }"
-                @click="setInputMode('custom')"
-              >
-                自定义轨迹
-              </button>
-            </div>
           </div>
 
-          <!-- 预设轨迹选择 -->
-          <div v-if="inputMode === 'preset'" class="preset-trajectories">
-            <div class="input-group">
-              <label>选择预设轨迹:</label>
-              <select v-model="selectedPreset" class="trajectory-select">
-                <option value="">请选择轨迹</option>
-                <option 
-                  v-for="(trajectory, index) in presetTrajectories" 
-                  :key="index"
-                  :value="index"
-                >
-                  {{ trajectory.name }}
-                </option>
-              </select>
-            </div>
-            <div v-if="selectedPreset !== ''" class="trajectory-info">
-              <div class="info-item">
-                <span class="info-label">轨迹名称:</span>
-                <span class="info-value">{{ presetTrajectories[selectedPreset].name }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">描述:</span>
-                <span class="info-value">{{ presetTrajectories[selectedPreset].description }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">轨迹点数:</span>
-                <span class="info-value">{{ presetTrajectories[selectedPreset].path.length }}个点</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 自定义轨迹输入 -->
-          <div v-if="inputMode === 'custom'" class="custom-trajectory">
-            <div class="input-group">
-              <label>轨迹点数据 (经纬度数组):</label>
-              <textarea 
-                v-model="customTrajectoryText"
-                placeholder="请输入轨迹点数据，格式：[[经度,纬度],[经度,纬度],...]&#10;例如：[[116.478935,39.997761],[116.478939,39.997825]]"
-                class="trajectory-textarea"
-                rows="6"
-              ></textarea>
-            </div>
-            <div class="input-group">
-              <button class="validate-btn" @click="validateCustomTrajectory">
-                验证轨迹数据
-              </button>
-            </div>
-          </div>
-
-          <!-- 回放参数设置 -->
-          <div class="playback-settings">
-            <div class="input-group">
-              <label>回放速度设置:</label>
-              <div class="speed-controls">
-                <input 
-                  v-model="playbackSettings.duration" 
-                  type="range" 
-                  min="100" 
-                  max="2000" 
-                  step="100"
-                  class="speed-slider"
-                />
-                <span class="speed-label">{{ playbackSettings.duration }}ms/段</span>
-              </div>
-            </div>
-            <div class="input-group">
-              <label class="checkbox-label">
-                <input 
-                  v-model="playbackSettings.autoRotation" 
-                  type="checkbox" 
-                  class="setting-checkbox"
-                />
-                自动旋转方向
-              </label>
-            </div>
-            <div class="input-group">
-              <label class="checkbox-label">
-                <input 
-                  v-model="playbackSettings.showTrack" 
-                  type="checkbox" 
-                  class="setting-checkbox"
-                />
-                显示已走轨迹
-              </label>
-            </div>
-          </div>
-
-          <!-- 控制按钮 -->
-          <div class="control-buttons">
+    <!-- 速度选择器 - 地图正下方 -->
+    <div class="speed-selector-bottom">
+      <div class="speed-selector-container">
+        <label class="speed-label">追踪速度:</label>
+        <div class="speed-options">
             <button 
-              class="control-btn start-btn" 
-              @click="loadTrajectory"
-              :disabled="!canLoadTrajectory"
-            >
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-                <path d="M6.5 2H20v20l-5.5-6"/>
-                <path d="M18 2v20"/>
-              </svg>
-              加载轨迹
+            v-for="speed in speedOptions" 
+            :key="speed.value"
+            class="speed-option-btn"
+            :class="{ active: selectedSpeed === speed.value }"
+            @click="selectedSpeed = speed.value"
+          >
+            {{ speed.label }}
             </button>
-            <button 
-              class="control-btn play-btn" 
-              @click="startAnimation"
-              :disabled="!trajectoryLoaded || isPlaying"
-            >
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <polygon points="5,3 19,12 5,21"/>
-              </svg>
-              开始回放
-            </button>
-          </div>
-
-          <div class="control-buttons">
-            <button 
-              class="control-btn pause-btn" 
-              @click="pauseAnimation"
-              :disabled="!isPlaying || isPaused"
-            >
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <rect x="6" y="4" width="4" height="16"/>
-                <rect x="14" y="4" width="4" height="16"/>
-              </svg>
-              暂停
-            </button>
-            <button 
-              class="control-btn resume-btn" 
-              @click="resumeAnimation"
-              :disabled="!isPaused"
-            >
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <polygon points="5,3 19,12 5,21"/>
-              </svg>
-              继续
-            </button>
-            <button 
-              class="control-btn stop-btn" 
-              @click="stopAnimation"
-              :disabled="!trajectoryLoaded"
-            >
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <rect x="3" y="3" width="18" height="18"/>
-              </svg>
-              停止
-            </button>
-          </div>
-        </div>
-
-        <!-- 回放状态显示 -->
-        <div v-if="playbackStatus" class="status-display">
-          <div class="status-header">
-            <h4>回放状态</h4>
-            <span class="status-indicator" :class="playbackStatus.state">
-              {{ getStatusText(playbackStatus.state) }}
-            </span>
-          </div>
-          <div class="status-content">
-            <div class="status-item">
-              <span class="status-label">当前进度:</span>
-              <span class="status-value">
-                {{ playbackStatus.currentPoint }}/{{ playbackStatus.totalPoints }}
-              </span>
-            </div>
-            <div class="status-item">
-              <span class="status-label">回放时长:</span>
-              <span class="status-value">{{ formatDuration(playbackStatus.elapsed) }}</span>
-            </div>
-            <div class="progress-bar">
-              <div 
-                class="progress-fill" 
-                :style="{ width: playbackStatus.progress + '%' }"
-              ></div>
             </div>
           </div>
         </div>
 
         <!-- 错误信息显示 -->
         <div v-if="errorMessage" class="error-message">
-          <div class="error-header">
-            <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="15" y1="9" x2="9" y2="15"/>
-              <line x1="9" y1="9" x2="15" y2="15"/>
-            </svg>
-            <span>错误信息</span>
+      <p>{{ errorMessage }}</p>
           </div>
-          <p class="error-text">{{ errorMessage }}</p>
-        </div>
-      </div>
-    </div>
+
+    <!-- 调试信息已移除 -->
   </div>
 </template>
 
@@ -253,435 +59,610 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['trajectory-loaded', 'playback-started', 'playback-paused', 'playback-stopped', 'playback-completed'])
+const emit = defineEmits(['trajectory-loaded', 'playback-started', 'playback-paused', 'playback-stopped', 'playback-completed', 'map-reinitialization-needed'])
 
 // 响应式数据
-const isPanelCollapsed = ref(false)
-const inputMode = ref('preset') // 'preset' | 'custom'
-const selectedPreset = ref('')
-const customTrajectoryText = ref('')
-const trajectoryLoaded = ref(false)
-const isPlaying = ref(false)
-const isPaused = ref(false)
+const isTracking = ref(false)
 const errorMessage = ref('')
+const currentTrajectoryName = ref('准备中...')
+const selectedSpeed = ref('60000') // 默认中等速度60秒
+const currentTrajectoryPath = ref([])
 
-// 回放设置
-const playbackSettings = ref({
-  duration: 500, // 每段的时长（毫秒）
-  autoRotation: true, // 自动旋转
-  showTrack: true // 显示已走轨迹
-})
+// 速度选项
+const speedOptions = ref([
+  { value: '30000', label: '快速 (30秒)' },
+  { value: '60000', label: '中等 (60秒)' },
+  { value: '90000', label: '慢速 (90秒)' }
+])
 
-// 回放状态
-const playbackStatus = ref(null)
-
+// Loca实例
+const locaInstance = ref(null)
 // 地图相关对象
 const marker = ref(null)
 const trajectoryPolyline = ref(null)
-const passedPolyline = ref(null)
-const currentTrajectoryPath = ref([])
+const cameraTrackingActive = ref(false)
 
-// 预设轨迹数据
+// 预设轨迹数据（保留用于兼容性）
 const presetTrajectories = ref([
   {
-    name: '北京市区路线',
-    description: '北京市区典型行驶轨迹',
+    name: '北京三环路段',
+    description: '包含多个转弯的三环路段轨迹',
     path: [
-      [116.478935,39.997761],[116.478939,39.997825],[116.478912,39.998549],
-      [116.478998,39.998555],[116.479282,39.99856],[116.479658,39.998528],
-      [116.480151,39.998453],[116.480784,39.998302],[116.481149,39.998184],
-      [116.481573,39.997997],[116.481863,39.997846],[116.482072,39.997718],
-      [116.482362,39.997718],[116.483633,39.998935],[116.48367,39.998968],
-      [116.484648,39.999861]
+      [116.368904, 39.915119], [116.370123, 39.916234], [116.372456, 39.918123],
+      [116.375234, 39.919456], [116.376789, 39.921234], [116.377123, 39.923567],
+      [116.376234, 39.925789], [116.374567, 39.927123], [116.372345, 39.928456],
+      [116.369876, 39.929234], [116.367234, 39.928567], [116.365789, 39.926789],
+      [116.365123, 39.924456], [116.366456, 39.922123], [116.368234, 39.919876],
+      [116.369567, 39.917234]
     ]
   },
   {
-    name: '环形测试路线',
-    description: '简单的环形轨迹用于测试',
+    name: '故宫周边游览路线',
+    description: '围绕故宫的复杂游览轨迹',
     path: [
-      [116.397428, 39.90923], [116.398428, 39.90923], [116.398428, 39.91023],
-      [116.397428, 39.91023], [116.397428, 39.90923]
-    ]
-  },
-  {
-    name: '长安街东西向',
-    description: '长安街东西方向行驶轨迹',
-    path: [
-      [116.391467, 39.906901], [116.392467, 39.906901], [116.393467, 39.906901],
-      [116.394467, 39.906901], [116.395467, 39.906901], [116.396467, 39.906901],
-      [116.397467, 39.906901], [116.398467, 39.906901], [116.399467, 39.906901],
-      [116.400467, 39.906901]
-    ]
-  },
-  {
-    name: '复杂城市路线',
-    description: '包含转弯和复杂路况的城市轨迹',
-    path: [
-      [116.405289, 39.904987], [116.405371, 39.905147], [116.405456, 39.905323],
-      [116.405542, 39.905501], [116.405631, 39.905682], [116.405722, 39.905866],
-      [116.405816, 39.906053], [116.405912, 39.906243], [116.406011, 39.906436],
-      [116.406112, 39.906631], [116.406216, 39.906829], [116.406322, 39.907029],
-      [116.406431, 39.907232], [116.406542, 39.907437], [116.406656, 39.907645],
-      [116.406772, 39.907855], [116.406891, 39.908068], [116.407012, 39.908283],
-      [116.407136, 39.908501], [116.407262, 39.908721]
+      [116.397428, 39.916023], [116.398234, 39.917456], [116.398789, 39.918234],
+      [116.399456, 39.919567], [116.400123, 39.920234], [116.401567, 39.920789],
+      [116.402234, 39.921456], [116.402789, 39.922123], [116.401456, 39.922567],
+      [116.400123, 39.922789], [116.398789, 39.922456], [116.397456, 39.921789],
+      [116.396789, 39.920456], [116.396234, 39.919123], [116.396789, 39.918234],
+      [116.397234, 39.917456]
     ]
   }
 ])
 
 // 计算属性
-const canLoadTrajectory = computed(() => {
-  if (inputMode.value === 'preset') {
-    return selectedPreset.value !== '' && props.mapInstance
-  } else {
-    return customTrajectoryText.value.trim() && props.mapInstance
-  }
+const canStartTracking = computed(() => {
+  return props.mapInstance && currentTrajectoryPath.value.length > 0
 })
 
 // 方法定义
-const togglePanel = () => {
-  isPanelCollapsed.value = !isPanelCollapsed.value
-}
-
-const setInputMode = (mode) => {
-  inputMode.value = mode
-  clearError()
-}
-
 const clearError = () => {
   errorMessage.value = ''
 }
 
-const validateCustomTrajectory = () => {
+// 初始化Loca库
+const initLoca = async () => {
+  if (!props.mapInstance) {
+    console.error('地图实例未准备就绪')
+    return false
+  }
+
   try {
-    const data = JSON.parse(customTrajectoryText.value.trim())
-    if (!Array.isArray(data)) {
-      throw new Error('数据格式错误：应该是数组格式')
+    // 检查是否已加载Loca
+    if (!window.Loca) {
+      console.log('Loca库未加载，尝试加载...')
+      // 这里应该通过AMapLoader加载Loca，但由于已有地图实例，我们假设Loca已加载
+      // 如果没有加载，需要重新初始化地图以包含Loca
+      throw new Error('Loca库未加载，请确保地图初始化时包含Loca配置')
     }
-    
-    for (let i = 0; i < data.length; i++) {
-      const point = data[i]
-      if (!Array.isArray(point) || point.length !== 2) {
-        throw new Error(`第${i + 1}个点格式错误：应该是[经度, 纬度]格式`)
-      }
-      
-      const [lng, lat] = point
-      if (typeof lng !== 'number' || typeof lat !== 'number') {
-        throw new Error(`第${i + 1}个点数据类型错误：经纬度应该是数字`)
-      }
-      
-      if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
-        throw new Error(`第${i + 1}个点坐标超出范围`)
-      }
-    }
-    
-    if (data.length < 2) {
-      throw new Error('轨迹点数量不足：至少需要2个点')
-    }
-    
-    clearError()
-    alert('轨迹数据验证通过！')
-    
+
+    // 创建Loca实例
+    locaInstance.value = new window.Loca.Container({
+      map: props.mapInstance
+    })
+
+    console.log('Loca实例创建成功')
+    return true
   } catch (error) {
-    errorMessage.value = `轨迹数据验证失败: ${error.message}`
+    console.error('Loca初始化失败:', error)
+    errorMessage.value = 'Loca库初始化失败，请确保地图支持3D模式'
+    return false
   }
 }
 
-const loadTrajectory = async () => {
+// 切换镜头追踪
+const toggleTracking = async () => {
+  console.log('切换镜头追踪状态，当前速度:', selectedSpeed.value)
+  if (isTracking.value) {
+    stopCameraTracking()
+  } else {
+    await startCameraTracking()
+  }
+}
+
+// 保持原有方法名的兼容性
+const toggleCameraTracking = toggleTracking
+
+// 开始镜头追踪
+const startCameraTracking = async () => {
+  console.log('开始镜头追踪')
+    clearError()
+  
   if (!props.mapInstance) {
     errorMessage.value = '地图实例未准备就绪'
     return
   }
 
+  if (currentTrajectoryPath.value.length === 0) {
+    errorMessage.value = '没有可用的轨迹数据'
+        return
+      }
+
   try {
-    clearError()
+    // 按照官方示例重新创建3D地图
+    console.log('重新创建3D地图以匹配官方示例...')
     
-    // 清除现有轨迹
-    clearTrajectory()
-    
-    // 获取轨迹路径
-    let trajectoryPath = []
-    if (inputMode.value === 'preset') {
-      if (selectedPreset.value === '') {
-        errorMessage.value = '请选择预设轨迹'
-        return
-      }
-      trajectoryPath = presetTrajectories.value[selectedPreset.value].path
-    } else {
-      // 自定义轨迹
-      try {
-        trajectoryPath = JSON.parse(customTrajectoryText.value.trim())
-      } catch (error) {
-        errorMessage.value = '自定义轨迹数据格式错误'
-        return
-      }
+    // 销毁现有地图
+    if (props.mapInstance && typeof props.mapInstance.destroy === 'function') {
+      props.mapInstance.destroy()
     }
     
-    if (!trajectoryPath || trajectoryPath.length < 2) {
-      errorMessage.value = '轨迹数据不足，至少需要2个点'
-      return
+    // 按照官方示例的配置创建新的3D地图，优化轨迹线显示
+    const newMapConfig = {
+      terrain: true,
+      viewMode: '3D',
+      zoom: 13.5,
+      center: currentTrajectoryPath.value[0], // 使用轨迹起点
+      pitch: 45,
+      rotation: -90,
+      showLabel: true,
+      mapStyle: 'amap://styles/509934ebf66e54cbfe10ccae0056c462',
+      showBuildingBlock: false,
+      dragEnable: false,
+      zoomEnable: false,
+      // 优化3D地形显示设置，提高轨迹线可见性
+      terrainExaggeration: 0.5,  // 降低地形夸张系数，减少遮挡
+      showTerrain: true,
+      skyColor: '#87CEEB',  // 设置天空颜色，增强对比度
+      // 添加更多优化选项
+      showIndoorMap: false,  // 关闭室内地图
+      defaultCursor: 'default'
     }
     
-    // 确保已加载动画插件
-    if (!window.AMap.MoveAnimation) {
-      await loadMoveAnimationPlugin()
-    }
+    console.log('新地图配置:', newMapConfig)
+    const new3DMap = new AMap.Map('container', newMapConfig)
+    console.log('新3D地图对象创建完成:', new3DMap)
+    console.log('新3D地图的容器ID:', new3DMap.getContainer().id)
     
-    // 创建轨迹标记（使用自行车图标）
-    marker.value = new AMap.Marker({
-      map: props.mapInstance,
-      position: trajectoryPath[0],
-      icon: createBicycleIcon(),
-      offset: new AMap.Pixel(-16, -16),
-      anchor: 'center'
-    })
-    
-    // 绘制完整轨迹线
-    trajectoryPolyline.value = new AMap.Polyline({
-      map: props.mapInstance,
-      path: trajectoryPath,
-      showDir: true,
-      strokeColor: "#28F",
-      strokeWeight: 6,
-      strokeOpacity: 0.8
-    })
-    
-    // 创建已走轨迹线（如果启用）
-    if (playbackSettings.value.showTrack) {
-      passedPolyline.value = new AMap.Polyline({
-        map: props.mapInstance,
-        strokeColor: "#AF5",
-        strokeWeight: 6,
-        strokeOpacity: 0.9
+    // 等待地图完全加载
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('地图加载超时'))
+      }, 10000)
+      
+      new3DMap.on('complete', () => {
+        clearTimeout(timeout)
+        console.log('3D地图创建完成')
+        resolve()
       })
+    })
+    
+    // 更新地图实例引用
+    const originalMapInstance = props.mapInstance
+    Object.defineProperty(props, 'mapInstance', {
+      value: new3DMap,
+      writable: true,
+      configurable: true
+    })
+    
+    // 初始化Loca（使用新的地图实例）
+    if (!locaInstance.value) {
+      locaInstance.value = new window.Loca.Container({
+        map: new3DMap
+      })
+      console.log('Loca实例创建成功（使用新3D地图）')
+    }
+
+    // 创建轨迹标记（按照官方示例），绑定到新的3D地图
+    createTrackMarker(new3DMap)
+
+    // 绘制轨迹线（按照官方示例），绑定到新的3D地图
+    drawTrajectoryPath(new3DMap)
+
+    // 按照官方示例启动动画循环
+    window.movingDraw = true
+    window.trajectoryAnimationFinished = false
+    
+    // 用于限制日志频率的计数器
+    let debugCounter = 0
+    
+    const run = () => {
+      if (!window.trajectoryAnimationFinished && trajectoryPolyline.value && isTracking.value) {
+        const center = props.mapInstance.getCenter().toArray()
+        const lastPath = trajectoryPolyline.value.getPath()
+        
+        // 每10次循环输出一次调试信息，避免控制台被淹没
+        if (debugCounter % 10 === 0) {
+          console.log('=== run() 动画循环调试 (第', debugCounter, '次) ===')
+          console.log('地图中心点:', center)
+          console.log('当前轨迹线路径长度:', lastPath.length)
+          console.log('当前轨迹线路径:', lastPath.slice(0, 3), '...(显示前3个点)')
+        }
+        
+        // 智能处理新的路径点：根据轨迹数据格式决定是否添加高度
+        let centerWith3D = center
+        if (center.length >= 2) {
+          // 检查原始轨迹数据是否包含高度信息
+          const hasOriginal3D = currentTrajectoryPath.value.some(point => 
+            Array.isArray(point) && point.length >= 3
+          )
+          
+          if (hasOriginal3D) {
+            // 原始数据包含3D信息，为新点添加适当高度
+            centerWith3D = [center[0], center[1], 50] // 使用较低高度以贴近地面
+          } else {
+            // 原始数据是2D，保持2D格式让地图自动处理高度
+            centerWith3D = [center[0], center[1]]
+          }
+        }
+        
+        if (debugCounter % 10 === 0) {
+          console.log('处理后的中心点:', centerWith3D)
+        }
+        
+        lastPath.push(centerWith3D)
+        if (lastPath.length === 1) {
+          lastPath.push(centerWith3D)
+        }
+        
+        trajectoryPolyline.value.setPath(lastPath)
+        
+        // 验证路径是否设置成功
+        const verifyPath = trajectoryPolyline.value.getPath()
+        if (debugCounter % 10 === 0) {
+          console.log('更新后轨迹线路径长度:', lastPath.length)
+          console.log('验证：轨迹线路径设置后长度:', verifyPath.length)
+        }
+        
+        if (marker.value) {
+          // 智能处理标记位置更新
+          const markerCenter = center.length >= 2 
+            ? (currentTrajectoryPath.value.some(point => Array.isArray(point) && point.length >= 3)
+                ? [center[0], center[1], 50] // 3D数据使用适当高度
+                : [center[0], center[1]])    // 2D数据保持2D格式
+            : center
+          marker.value.setPosition(markerCenter)
+          
+          if (debugCounter % 10 === 0) {
+            console.log('标记位置已更新:', markerCenter)
+          }
+        }
+        
+        if (debugCounter % 10 === 0) {
+          console.log('=== run() 循环结束 ===')
+        }
+        
+        debugCounter++
+      }
+      
+      if (!window.trajectoryAnimationFinished && isTracking.value) {
+        requestAnimationFrame(run)
+      }
     }
     
-    // 监听移动事件
-    marker.value.on('moving', (e) => {
-      if (passedPolyline.value) {
-        passedPolyline.value.setPath(e.passedPath)
+    // 启动Loca动画（按照官方示例）
+    locaInstance.value.animate.start()
+    
+    console.log('轨迹线已正确绑定到新3D地图')
+    
+    // 在Loca动画启动后再开始run循环（确保正确的时序）
+    setTimeout(() => {
+      run()
+      console.log('run循环已启动')
+    }, 100)
+    
+    // 验证轨迹线是否在地图上可见，并尝试备用方案
+    setTimeout(() => {
+      if (trajectoryPolyline.value) {
+        console.log('=== 轨迹线可见性检查 ===')
+        console.log('轨迹线实例:', trajectoryPolyline.value)
+        console.log('轨迹线当前路径:', trajectoryPolyline.value.getPath())
+        console.log('轨迹线是否可见:', trajectoryPolyline.value.getVisible ? trajectoryPolyline.value.getVisible() : '未知')
+        console.log('轨迹线zIndex:', trajectoryPolyline.value.getzIndex ? trajectoryPolyline.value.getzIndex() : '未知')
+        
+        // 如果轨迹线路径为空或只有一个点，尝试强制设置初始路径
+        const currentPath = trajectoryPolyline.value.getPath()
+        if (!currentPath || currentPath.length <= 1) {
+          console.warn('轨迹线路径异常，尝试强制设置初始路径')
+          const startPoint = currentTrajectoryPath.value[0]
+          if (startPoint) {
+            const forcePath = Array.isArray(startPoint) && startPoint.length === 2
+              ? [[startPoint[0], startPoint[1]], [startPoint[0], startPoint[1]]]
+              : [startPoint, startPoint]
+            trajectoryPolyline.value.setPath(forcePath)
+            console.log('已强制设置轨迹线初始路径:', forcePath)
+          }
+        }
+        
+        // 尝试强制显示轨迹线
+        if (trajectoryPolyline.value.show) {
+          trajectoryPolyline.value.show()
+          console.log('已调用轨迹线show()方法')
+        }
       }
-      
-      // 更新回放状态
-      if (playbackStatus.value) {
-        const progress = (e.passedPath.length / trajectoryPath.length) * 100
-        playbackStatus.value.currentPoint = e.passedPath.length
-        playbackStatus.value.progress = Math.min(progress, 100)
-      }
-      
-      // 地图跟随
-      props.mapInstance.setCenter(e.target.getPosition(), true)
-    })
-    
-    // 监听动画完成事件
-    marker.value.on('moveend', () => {
-      isPlaying.value = false
-      isPaused.value = false
-      
-      if (playbackStatus.value) {
-        playbackStatus.value.state = 'completed'
-        playbackStatus.value.progress = 100
-      }
-      
-      emit('playback-completed')
-      console.log('轨迹回放完成')
-    })
-    
-    // 保存轨迹路径
-    currentTrajectoryPath.value = trajectoryPath
-    
-    // 调整地图视野
-    props.mapInstance.setFitView([marker.value, trajectoryPolyline.value])
-    
-    // 初始化回放状态
-    playbackStatus.value = {
-      state: 'loaded',
-      currentPoint: 0,
-      totalPoints: trajectoryPath.length,
-      progress: 0,
-      elapsed: 0,
-      startTime: null
-    }
-    
-    trajectoryLoaded.value = true
-    
-    emit('trajectory-loaded', {
-      path: trajectoryPath,
-      name: inputMode.value === 'preset' 
-        ? presetTrajectories.value[selectedPreset.value].name 
-        : '自定义轨迹'
-    })
-    
-    console.log('轨迹加载成功，轨迹点数量:', trajectoryPath.length)
+    }, 2000)
+
+    // 开始镜头追踪动画
+    startViewControlTracking()
+
+    isTracking.value = true
+    emit('playback-started')
     
   } catch (error) {
-    console.error('轨迹加载失败:', error)
-    errorMessage.value = `轨迹加载失败: ${error.message}`
+    console.error('开始镜头追踪失败:', error)
+    errorMessage.value = `开始镜头追踪失败: ${error.message}`
   }
 }
 
-const loadMoveAnimationPlugin = () => {
-  return new Promise((resolve, reject) => {
-    AMap.plugin('AMap.MoveAnimation', () => {
-      console.log('MoveAnimation 插件加载成功')
-      resolve()
-    })
+// 停止镜头追踪
+const stopCameraTracking = () => {
+  console.log('停止镜头追踪')
+  
+  // 停止路径绘制动画
+  if (window.trajectoryAnimationFinished !== undefined) {
+    window.trajectoryAnimationFinished = true
+  }
+  
+  // 停止视角追踪
+  if (locaInstance.value && locaInstance.value.viewControl) {
+    try {
+      locaInstance.value.viewControl.stop()
+  } catch (error) {
+      console.warn('停止视角控制失败:', error)
+    }
+  }
+
+  // 清除标记
+  if (marker.value) {
+    marker.value.setMap(null)
+    marker.value = null
+  }
+
+  // 清除轨迹线
+  if (trajectoryPolyline.value) {
+    trajectoryPolyline.value.setMap(null)
+    trajectoryPolyline.value = null
+  }
+
+  // 需要重新初始化原始地图以恢复正常功能
+  // 由于我们重新创建了3D地图，停止时需要通知父组件重新初始化地图
+  console.log('镜头追踪停止，需要重新初始化地图')
+  emit('map-reinitialization-needed')
+
+  isTracking.value = false
+  cameraTrackingActive.value = false
+  emit('playback-stopped')
+}
+
+// 创建轨迹标记（按照官方示例）
+const createTrackMarker = (targetMap = null) => {
+  if (marker.value) {
+    marker.value.setMap(null)
+  }
+
+  // 使用传入的地图实例或默认地图实例
+  const mapToUse = targetMap || props.mapInstance
+
+  // 修正：标记初始位置应该在轨迹起点，而不是终点
+  const startPosition = currentTrajectoryPath.value[0]
+  
+  // 智能处理标记位置：根据原始数据格式决定高度处理
+  let markerPosition = startPosition
+  if (Array.isArray(startPosition)) {
+    if (startPosition.length === 2) {
+      // 2D数据，保持2D格式让地图自动处理高度
+      markerPosition = [startPosition[0], startPosition[1]]
+    } else if (startPosition.length >= 3) {
+      // 3D数据，保持原有高度
+      markerPosition = [startPosition[0], startPosition[1], startPosition[2]]
+    }
+  }
+  
+  console.log('标记初始位置（起点）:', markerPosition)
+  
+  marker.value = new AMap.Marker({
+    position: markerPosition,
+    content: '<div class="amap-ani"></div>',
+    anchor: 'bottom-center',
+    map: mapToUse
   })
+  
+  console.log('创建轨迹标记，初始位置（起点）:', startPosition)
+  console.log('标记已绑定到地图实例:', targetMap ? '新3D地图' : '原地图')
+  console.log('targetMap参数:', targetMap)
+  console.log('mapToUse对象:', mapToUse)
+  console.log('props.mapInstance对象:', props.mapInstance)
+  console.log('是否使用了targetMap:', targetMap !== null)
 }
 
-// 创建自行车图标
-const createBicycleIcon = () => {
-  // 创建SVG自行车图标
-  const bicycleSvg = `
-    <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
-          <dropshadow dx="1" dy="1" stdDeviation="1" flood-color="#000" flood-opacity="0.3"/>
-        </filter>
-      </defs>
-      <!-- 自行车轮子 -->
-      <circle cx="8" cy="22" r="6" fill="none" stroke="#333" stroke-width="2"/>
-      <circle cx="24" cy="22" r="6" fill="none" stroke="#333" stroke-width="2"/>
-      
-      <!-- 车轮中心 -->
-      <circle cx="8" cy="22" r="1.5" fill="#333"/>
-      <circle cx="24" cy="22" r="1.5" fill="#333"/>
-      
-      <!-- 车架 -->
-      <line x1="8" y1="22" x2="16" y2="12" stroke="#4CAF50" stroke-width="2.5" stroke-linecap="round"/>
-      <line x1="16" y1="12" x2="24" y2="22" stroke="#4CAF50" stroke-width="2.5" stroke-linecap="round"/>
-      <line x1="16" y1="12" x2="16" y2="6" stroke="#4CAF50" stroke-width="2.5" stroke-linecap="round"/>
-      <line x1="8" y1="22" x2="24" y2="22" stroke="#4CAF50" stroke-width="2" stroke-linecap="round"/>
-      
-      <!-- 座椅 -->
-      <line x1="12" y1="16" x2="18" y2="16" stroke="#333" stroke-width="3" stroke-linecap="round"/>
-      <line x1="15" y1="16" x2="15" y2="12" stroke="#333" stroke-width="2"/>
-      
-      <!-- 把手 -->
-      <line x1="14" y1="6" x2="18" y2="6" stroke="#333" stroke-width="3" stroke-linecap="round"/>
-      
-      <!-- 踏板 -->
-      <circle cx="16" cy="19" r="2" fill="none" stroke="#666" stroke-width="1.5"/>
-      <line x1="14" y1="19" x2="18" y2="19" stroke="#666" stroke-width="2"/>
-    </svg>
-  `
+// 绘制轨迹路径（按照官方示例）
+const drawTrajectoryPath = (targetMap = null) => {
+  if (trajectoryPolyline.value) {
+    trajectoryPolyline.value.setMap(null)
+  }
+
+  // 检查轨迹路径是否有效
+  if (!currentTrajectoryPath.value || currentTrajectoryPath.value.length === 0) {
+    console.error('轨迹路径为空，无法绘制')
+    return
+  }
   
-  // 将SVG转换为Data URL
-  const svgDataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(bicycleSvg)
+  // 使用传入的地图实例或默认地图实例
+  const mapToUse = targetMap || props.mapInstance
+  console.log('绘制轨迹线到地图实例:', mapToUse)
   
-  return svgDataUrl
+  // 按照官方示例创建轨迹线，初始路径为起始点的重复
+  const startPoint = currentTrajectoryPath.value[0]
+  console.log('=== 创建轨迹线调试 ===')
+  console.log('起始点:', startPoint)
+  console.log('起始点类型:', typeof startPoint, '是否数组:', Array.isArray(startPoint))
+  console.log('地图实例:', mapToUse)
+  console.log('地图实例类型:', typeof mapToUse)
+  
+  // 根据官方示例，轨迹线应该从起始点开始，逐渐绘制整条路径
+  // 但初始化时只设置起始点的重复点，后续通过动画添加路径点
+  const pathWith3D = [startPoint, startPoint].map(point => {
+    if (Array.isArray(point)) {
+      if (point.length === 2) {
+        // 2D数据：[经度, 纬度] - 不添加高度，让高德地图自动处理
+        console.log('检测到2D轨迹点，使用地面高度:', point)
+        return [point[0], point[1]] // 保持原始2D格式
+      } else if (point.length >= 3) {
+        // 3D数据：[经度, 纬度, 高度] - 保持原有高度
+        console.log('检测到3D轨迹点，保持原有高度:', point)
+        return [point[0], point[1], point[2]]
+      }
+    }
+    return point
+  })
+  
+  console.log('轨迹线初始化路径（仅起始点）:', pathWith3D)
+  console.log('完整轨迹路径将通过动画逐步添加，总点数:', currentTrajectoryPath.value.length)
+  
+  console.log('处理后的路径点:', pathWith3D)
+  
+  // 根据数据类型优化轨迹线配置
+  const is2DData = pathWith3D.every(point => Array.isArray(point) && point.length === 2)
+  
+  trajectoryPolyline.value = new AMap.Polyline({
+    path: pathWith3D,
+    isOutline: true,
+    outlineColor: '#FFFFFF', // 白色描边增强对比度
+    borderWeight: is2DData ? 8 : 6, // 增加描边宽度
+    strokeColor: '#00FF00',  // 使用更亮的纯绿色，增强可见性
+    strokeOpacity: 1,
+    strokeWeight: is2DData ? 30 : 25, // 进一步增加线条宽度
+    strokeStyle: 'solid',
+    lineJoin: 'round',
+    lineCap: 'round',
+    zIndex: 2000, // 使用更高的层级确保在所有元素之上
+    geodesic: false,  // 关闭大地线模式，使用直线连接
+    showDir: false,   // 暂时关闭方向箭头，避免干扰
+    cursor: 'pointer',
+    visible: true,    // 明确设置为可见
+    bubble: true,     // 启用事件冒泡
+    map: mapToUse
+  })
+  
+  console.log(`轨迹线配置 - 数据类型: ${is2DData ? '2D' : '3D'}, 线宽: ${is2DData ? 30 : 25}, 层级: 2000`)
+  
+  console.log('轨迹线对象创建成功:', trajectoryPolyline.value)
+  console.log('轨迹线初始路径:', trajectoryPolyline.value.getPath())
+  console.log('轨迹线已绑定到地图实例:', targetMap ? '新3D地图' : '原地图')
+  console.log('轨迹线 targetMap参数:', targetMap)
+  console.log('轨迹线 mapToUse对象:', mapToUse)
+  console.log('轨迹线 props.mapInstance对象:', props.mapInstance)
+  console.log('轨迹线是否使用了targetMap:', targetMap !== null)
+  
+  // 强制确保轨迹线可见
+  if (trajectoryPolyline.value) {
+    // 多种方式尝试让轨迹线可见
+    trajectoryPolyline.value.show()
+    trajectoryPolyline.value.setOptions({
+      visible: true,
+      zIndex: 2000
+    })
+    
+    // 强制触发地图重绘
+    if (mapToUse && mapToUse.setLayers) {
+      setTimeout(() => {
+        mapToUse.getSize()  // 触发地图重新计算
+        console.log('已触发地图重绘')
+      }, 50)
+    }
+    
+    console.log('已强制设置轨迹线可见性')
+  }
 }
 
-const startAnimation = () => {
-  if (!marker.value || !currentTrajectoryPath.value.length) {
-    errorMessage.value = '请先加载轨迹'
+// 开始视角控制追踪（按照官方示例）
+const startViewControlTracking = () => {
+  if (!locaInstance.value) {
+    console.error('Loca实例不存在')
     return
   }
   
   try {
-    marker.value.moveAlong(currentTrajectoryPath.value, {
-      duration: playbackSettings.value.duration,
-      autoRotation: playbackSettings.value.autoRotation,
-    })
-    
-    isPlaying.value = true
-    isPaused.value = false
-    
-    if (playbackStatus.value) {
-      playbackStatus.value.state = 'playing'
-      playbackStatus.value.startTime = Date.now()
+    // 按照官方示例添加镜头追踪
+    if (locaInstance.value.viewControl && locaInstance.value.viewControl.addTrackAnimate) {
+      const duration = parseInt(selectedSpeed.value)
+      
+      // 重置轨迹线（按照官方示例在点击时重置）
+      if (trajectoryPolyline.value && currentTrajectoryPath.value.length > 0) {
+        const startPoint = currentTrajectoryPath.value[0]
+        console.log('重置轨迹线路径到起始点:', startPoint)
+        trajectoryPolyline.value.setPath([startPoint, startPoint])
+        console.log('轨迹线路径重置完成，当前路径:', trajectoryPolyline.value.getPath())
+      }
+      
+      console.log('=== 启动Loca镜头追踪 ===')
+      console.log('轨迹路径:', currentTrajectoryPath.value)
+      console.log('动画时长:', duration, 'ms')
+      console.log('Loca实例:', locaInstance.value)
+      console.log('viewControl对象:', locaInstance.value.viewControl)
+      
+      locaInstance.value.viewControl.addTrackAnimate({
+        path: currentTrajectoryPath.value, // 镜头轨迹，二维数组，支持海拔
+        duration: duration, // 时长
+        timing: [[0, 0.3], [1, 0.7]], // 速率控制器
+        rotationSpeed: 10, // 每秒旋转多少度
+      }, () => {
+        window.trajectoryAnimationFinished = true
+        cameraTrackingActive.value = false
+        console.log('镜头追踪完成')
+        emit('playback-completed')
+        
+        // 自动停止追踪
+        setTimeout(() => {
+          if (isTracking.value) {
+            stopCameraTracking()
+          }
+        }, 1000)
+      })
+
+      cameraTrackingActive.value = true
+      console.log('镜头追踪已启动，时长:', duration, 'ms')
+      console.log('镜头追踪状态:', cameraTrackingActive.value)
+    } else {
+      console.error('viewControl.addTrackAnimate 方法不可用')
+      errorMessage.value = 'Loca视角控制功能不可用，请确保使用最新版本的高德地图API'
     }
     
-    // 开始计时
-    startElapsedTimer()
-    
-    emit('playback-started')
-    console.log('轨迹回放开始')
-    
   } catch (error) {
-    console.error('开始回放失败:', error)
-    errorMessage.value = `开始回放失败: ${error.message}`
+    console.error('启动视角追踪失败:', error)
+    errorMessage.value = `启动视角追踪失败: ${error.message}`
   }
 }
 
-const pauseAnimation = () => {
-  if (!marker.value) return
+// 加载轨迹数据（内部方法）
+const loadTrajectoryData = (trajectoryPath, name = '轨迹追踪') => {
+  console.log('=== 加载轨迹数据调试 ===')
+  console.log('轨迹数据:', trajectoryPath)
+  console.log('轨迹名称:', name)
+  console.log('轨迹数据类型:', typeof trajectoryPath)
+  console.log('是否为数组:', Array.isArray(trajectoryPath))
   
-  try {
-    marker.value.pauseMove()
-    isPaused.value = true
-    
-    if (playbackStatus.value) {
-      playbackStatus.value.state = 'paused'
-    }
-    
-    stopElapsedTimer()
-    
-    emit('playback-paused')
-    console.log('轨迹回放暂停')
-    
-  } catch (error) {
-    console.error('暂停回放失败:', error)
-    errorMessage.value = `暂停回放失败: ${error.message}`
+  if (!trajectoryPath || trajectoryPath.length < 2) {
+    console.error('轨迹数据不足，至少需要2个点。当前点数:', trajectoryPath?.length || 0)
+    errorMessage.value = '轨迹数据不足，至少需要2个点'
+    return false
   }
-}
 
-const resumeAnimation = () => {
-  if (!marker.value) return
+  // 验证每个轨迹点的格式
+  console.log('验证轨迹点格式:')
+  trajectoryPath.forEach((point, index) => {
+    console.log(`轨迹点 ${index}:`, point, '类型:', typeof point, '是否数组:', Array.isArray(point))
+    if (Array.isArray(point) && point.length >= 2) {
+      console.log(`  经度: ${point[0]} (${typeof point[0]}), 纬度: ${point[1]} (${typeof point[1]})`)
+      console.log(`  坐标有效性: 经度=${!isNaN(point[0])}, 纬度=${!isNaN(point[1])}`)
+    }
+  })
+
+  currentTrajectoryPath.value = trajectoryPath
+  currentTrajectoryName.value = name
   
-  try {
-    marker.value.resumeMove()
-    isPaused.value = false
-    
-    if (playbackStatus.value) {
-      playbackStatus.value.state = 'playing'
-    }
-    
-    startElapsedTimer()
-    
-    emit('playback-started')
-    console.log('轨迹回放继续')
-    
-  } catch (error) {
-    console.error('继续回放失败:', error)
-    errorMessage.value = `继续回放失败: ${error.message}`
-  }
-}
-
-const stopAnimation = () => {
-  if (!marker.value) return
+  emit('trajectory-loaded', {
+    path: trajectoryPath,
+    name: name
+  })
   
-  try {
-    marker.value.stopMove()
-    isPlaying.value = false
-    isPaused.value = false
-    
-    if (playbackStatus.value) {
-      playbackStatus.value.state = 'stopped'
-      playbackStatus.value.currentPoint = 0
-      playbackStatus.value.progress = 0
-    }
-    
-    // 重置标记位置到起点
-    if (currentTrajectoryPath.value.length > 0) {
-      marker.value.setPosition(currentTrajectoryPath.value[0])
-    }
-    
-    // 清除已走轨迹
-    if (passedPolyline.value) {
-      passedPolyline.value.setPath([])
-    }
-    
-    stopElapsedTimer()
-    
-    emit('playback-stopped')
-    console.log('轨迹回放停止')
-    
-  } catch (error) {
-    console.error('停止回放失败:', error)
-    errorMessage.value = `停止回放失败: ${error.message}`
-  }
+  console.log('轨迹数据加载成功，总点数:', trajectoryPath.length)
+  console.log('起始点:', trajectoryPath[0])
+  console.log('终点:', trajectoryPath[trajectoryPath.length - 1])
+  return true
 }
 
+// 清除轨迹（内部方法）
 const clearTrajectory = () => {
   // 清除标记
   if (marker.value) {
@@ -695,62 +676,48 @@ const clearTrajectory = () => {
     trajectoryPolyline.value = null
   }
   
-  // 清除已走轨迹线
-  if (passedPolyline.value) {
-    passedPolyline.value.setMap(null)
-    passedPolyline.value = null
+  // 停止Loca动画
+  if (locaInstance.value) {
+    try {
+      locaInstance.value.animate.stop()
+    } catch (error) {
+      console.warn('停止Loca动画失败:', error)
+    }
   }
   
   // 重置状态
-  trajectoryLoaded.value = false
-  isPlaying.value = false
-  isPaused.value = false
+  isTracking.value = false
+  cameraTrackingActive.value = false
   currentTrajectoryPath.value = []
-  playbackStatus.value = null
-  
-  stopElapsedTimer()
+  currentTrajectoryName.value = '准备中...'
 }
 
-// 计时器相关
-let elapsedTimer = null
-
-const startElapsedTimer = () => {
-  stopElapsedTimer()
-  elapsedTimer = setInterval(() => {
-    if (playbackStatus.value && playbackStatus.value.startTime) {
-      playbackStatus.value.elapsed = Date.now() - playbackStatus.value.startTime
-    }
-  }, 100)
-}
-
+// 停止计时器（兼容性函数）
 const stopElapsedTimer = () => {
-  if (elapsedTimer) {
-    clearInterval(elapsedTimer)
-    elapsedTimer = null
-  }
+  // 镜头追踪模式不需要计时器，这是一个兼容性函数
+  console.log('stopElapsedTimer 被调用（镜头追踪模式）')
 }
 
-// 工具函数
-const getStatusText = (state) => {
-  const statusTexts = {
-    'loaded': '已加载',
-    'playing': '播放中',
-    'paused': '已暂停',
-    'stopped': '已停止',
-    'completed': '已完成'
-  }
-  return statusTexts[state] || '未知'
+// 兼容性方法（保持原有接口不变）
+const startAnimation = () => {
+  return startCameraTracking()
 }
 
-const formatDuration = (milliseconds) => {
-  const seconds = Math.floor(milliseconds / 1000)
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = seconds % 60
-  
-  if (minutes > 0) {
-    return `${minutes}分${remainingSeconds}秒`
-  }
-  return `${remainingSeconds}秒`
+const pauseAnimation = () => {
+  console.log('镜头追踪模式不支持暂停功能')
+}
+
+const resumeAnimation = () => {
+  console.log('镜头追踪模式不支持继续功能')
+}
+
+const stopAnimation = () => {
+  return stopCameraTracking()
+}
+
+const loadTrajectory = () => {
+  // 兼容性方法，实际加载由外部调用 setAndLoadCustomTrajectory 完成
+  console.log('请使用 setAndLoadCustomTrajectory 方法加载轨迹')
 }
 
 // 监听地图实例变化
@@ -760,9 +727,24 @@ watch(() => props.mapInstance, (newInstance) => {
   }
 })
 
+// 监听速度选择变化
+watch(selectedSpeed, (newSpeed) => {
+  console.log('速度设置已更改为:', newSpeed)
+  // 如果正在追踪，提示用户重新开始以应用新速度
+  if (isTracking.value) {
+    console.log('速度更改将在下次开始追踪时生效')
+  }
+})
+
 // 组件挂载
 onMounted(() => {
-  console.log('TrajectoryPlayback 组件已挂载')
+  console.log('=== TrajectoryPlayback 轨迹回放组件已挂载 ===')
+  console.log('地图实例:', props.mapInstance)
+  console.log('是否可见:', props.visible)
+  console.log('DOM元素检查:', document.querySelector('.trajectory-playback'))
+  console.log('标题元素检查:', document.querySelector('.demo-title'))
+  console.log('速度选择器检查:', document.querySelector('.speed-selector-bottom'))
+  console.log('主控制按钮检查:', document.querySelector('.main-control'))
 })
 
 // 组件卸载
@@ -781,537 +763,301 @@ defineExpose({
   stopAnimation,
   clearTrajectory,
   setPresetTrajectory: (index) => {
-    inputMode.value = 'preset'
-    selectedPreset.value = index
+    console.log('设置预设轨迹:', index)
+    if (presetTrajectories.value[index]) {
+      const trajectory = presetTrajectories.value[index]
+      loadTrajectoryData(trajectory.path, trajectory.name)
+    }
   },
   setCustomTrajectory: (path) => {
     console.log('TrajectoryPlayback: 设置自定义轨迹', path)
-    inputMode.value = 'custom'
-    customTrajectoryText.value = JSON.stringify(path, null, 2)
+    loadTrajectoryData(path, '自定义轨迹')
   },
   // 新增方法：设置并自动加载自定义轨迹
-  setAndLoadCustomTrajectory: async (path) => {
+  setAndLoadCustomTrajectory: async (path, name = '自定义轨迹') => {
     console.log('TrajectoryPlayback: 设置并加载自定义轨迹', path)
     
     // 先清除现有轨迹
     clearTrajectory()
     
-    // 设置为自定义模式
-    inputMode.value = 'custom'
-    customTrajectoryText.value = JSON.stringify(path, null, 2)
-    
-    // 等待一下让UI更新
+    // 等待一下让状态更新
     await nextTick()
     
-    // 自动加载轨迹
-    await loadTrajectory()
+    // 加载轨迹数据
+    const success = loadTrajectoryData(path, name)
     
+    if (success) {
     console.log('TrajectoryPlayback: 自定义轨迹加载完成')
+    }
+    
+    return success
   }
 })
 </script>
 
 <style scoped>
 .trajectory-playback {
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
+  pointer-events: none; /* 让地图交互穿透 */
+  z-index: 1500; /* 确保在地图控件之上 */
 }
 
-.playback-panel {
-  position: fixed;
-  top: 70px; /* 位于导航按钮下方 */
-  right: 10px;
-  width: 350px;
-  max-height: calc(90vh - 80px);
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  z-index: 1000;
-  overflow: hidden;
-  transition: all 0.3s ease;
+.trajectory-playback > * {
+  pointer-events: auto; /* 恢复子元素的交互 */
 }
 
-.playback-panel.collapsed {
-  width: 60px;
+/* 标题样式 */
+.demo-title {
+  position: absolute;
+  top: 50px;
+  left: 50px;
+  z-index: 1600; /* 提高层级，确保在嵌套环境中可见 */
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
-  color: white;
-  border-radius: 12px 12px 0 0;
-}
-
-.panel-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.demo-title h1 {
   margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.demo-title h3 {
+  font-weight: normal;
+  margin-top: 5px;
   font-size: 16px;
-  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
 }
 
-.title-icon {
-  width: 20px;
-  height: 20px;
-  stroke-width: 2;
+/* 主控制按钮 - 右下角 */
+.main-control {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1600; /* 提高层级，确保在嵌套环境中可见 */
 }
 
-.collapse-btn {
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  border-radius: 6px;
-  padding: 6px;
-  cursor: pointer;
-  color: white;
-  transition: all 0.2s ease;
+/* 速度选择器 - 地图正下方 */
+.speed-selector-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1600; /* 提高层级，确保在嵌套环境中可见 */
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
 }
 
-.collapse-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.collapse-btn svg {
-  width: 16px;
-  height: 16px;
-  stroke-width: 2;
-}
-
-.panel-content {
-  padding: 20px;
-  max-height: calc(90vh - 140px);
-  overflow-y: auto;
-}
-
-.trajectory-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.input-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.input-group label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #333;
-}
-
-.input-mode-buttons {
-  display: flex;
-  gap: 8px;
-}
-
-.mode-btn {
-  flex: 1;
-  padding: 8px 16px;
-  border: 2px solid #e1e5e9;
-  border-radius: 8px;
-  background: white;
-  color: #666;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.mode-btn:hover {
-  border-color: #ff6b6b;
-  color: #ff6b6b;
-}
-
-.mode-btn.active {
-  border-color: #ff6b6b;
-  background: #ff6b6b;
-  color: white;
-}
-
-.trajectory-select {
-  padding: 10px 12px;
-  border: 2px solid #e1e5e9;
-  border-radius: 8px;
-  font-size: 14px;
-  background: white;
-  cursor: pointer;
-  transition: border-color 0.2s ease;
-}
-
-.trajectory-select:focus {
-  outline: none;
-  border-color: #ff6b6b;
-}
-
-.trajectory-info {
-  background: #f8f9fa;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid #e9ecef;
-}
-
-.info-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.info-item:last-child {
-  margin-bottom: 0;
-}
-
-.info-label {
-  color: #666;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.info-value {
-  color: #333;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.trajectory-textarea {
-  padding: 10px 12px;
-  border: 2px solid #e1e5e9;
-  border-radius: 8px;
-  font-size: 13px;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  resize: vertical;
-  min-height: 120px;
-  transition: border-color 0.2s ease;
-}
-
-.trajectory-textarea:focus {
-  outline: none;
-  border-color: #ff6b6b;
-}
-
-.validate-btn {
-  padding: 8px 16px;
-  border: 2px solid #17a2b8;
-  border-radius: 6px;
-  background: #17a2b8;
-  color: white;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.validate-btn:hover {
-  background: #138496;
-  border-color: #138496;
-}
-
-.playback-settings {
-  background: #f8f9fa;
-  padding: 16px;
-  border-radius: 8px;
-  border: 1px solid #e9ecef;
-}
-
-.speed-controls {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.speed-slider {
-  flex: 1;
-  height: 4px;
-  border-radius: 2px;
-  background: #e1e5e9;
-  outline: none;
-  cursor: pointer;
-}
-
-.speed-slider::-webkit-slider-thumb {
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #ff6b6b;
-  cursor: pointer;
-}
-
-.speed-label {
-  font-size: 12px;
-  color: #666;
-  font-weight: 600;
-  min-width: 70px;
-}
-
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  color: #333;
-}
-
-.setting-checkbox {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
-
-.control-buttons {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.control-btn {
-  flex: 1;
-  padding: 10px 12px;
-  border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
+.speed-selector-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 20px;
+  flex-wrap: wrap;
 }
 
-.control-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.speed-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2c3e50;
+  white-space: nowrap;
 }
 
-.btn-icon {
-  width: 16px;
-  height: 16px;
-  stroke-width: 2;
+.speed-options {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.speed-option-btn {
+  padding: 10px 20px;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  background: white;
+  color: #6c757d;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  min-width: 100px;
+}
+
+.speed-option-btn:hover {
+  border-color: #1A66FF;
+  color: #1A66FF;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(26, 102, 255, 0.2);
+}
+
+.speed-option-btn.active {
+  background: #1A66FF;
+  border-color: #1A66FF;
+  color: white;
+  box-shadow: 0 4px 12px rgba(26, 102, 255, 0.3);
+}
+
+.speed-option-btn.active:hover {
+  background: #0056d6;
+  border-color: #0056d6;
 }
 
 .start-btn {
-  background: #28a745;
-  color: white;
+  padding: 12px 24px;
+  height: 48px;
+  background-color: #1A66FF;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 16px rgba(26, 102, 255, 0.3);
+  min-width: 160px;
 }
 
 .start-btn:hover:not(:disabled) {
-  background: #218838;
-  transform: translateY(-1px);
+  background-color: #0056d6;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(26, 102, 255, 0.4);
 }
 
-.play-btn {
-  background: #007bff;
-  color: white;
+.start-btn:active {
+  transform: translateY(0);
 }
 
-.play-btn:hover:not(:disabled) {
-  background: #0056b3;
-  transform: translateY(-1px);
+.start-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
-.pause-btn {
-  background: #ffc107;
-  color: #333;
+/* 轨迹标记样式 */
+:global(.amap-ani) {
+  width: 44px;
+  height: 52px;
+  background: url('https://a.amap.com/Loca/static/loca-v2/demos/images/track_marker.png');
+  background-size: 44px 52px;
 }
 
-.pause-btn:hover:not(:disabled) {
-  background: #e0a800;
-  transform: translateY(-1px);
-}
-
-.resume-btn {
-  background: #17a2b8;
-  color: white;
-}
-
-.resume-btn:hover:not(:disabled) {
-  background: #138496;
-  transform: translateY(-1px);
-}
-
-.stop-btn {
-  background: #dc3545;
-  color: white;
-}
-
-.stop-btn:hover:not(:disabled) {
-  background: #c82333;
-  transform: translateY(-1px);
-}
-
-.status-display {
-  margin-top: 16px;
-  padding: 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  border: 1px solid #e9ecef;
-}
-
-.status-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.status-header h4 {
-  margin: 0;
-  color: #333;
-  font-size: 15px;
-}
-
-.status-indicator {
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.status-indicator.loaded {
-  background: #d1ecf1;
-  color: #0c5460;
-}
-
-.status-indicator.playing {
-  background: #d4edda;
-  color: #155724;
-}
-
-.status-indicator.paused {
-  background: #fff3cd;
-  color: #856404;
-}
-
-.status-indicator.stopped {
-  background: #f8d7da;
-  color: #721c24;
-}
-
-.status-indicator.completed {
-  background: #d1ecf1;
-  color: #0c5460;
-}
-
-.status-content {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.status-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-}
-
-.status-label {
-  color: #666;
-  font-weight: 500;
-}
-
-.status-value {
-  color: #333;
-  font-weight: 600;
-}
-
-.progress-bar {
-  width: 100%;
-  height: 6px;
-  background: #e9ecef;
-  border-radius: 3px;
-  overflow: hidden;
-  margin-top: 4px;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #ff6b6b 0%, #ee5a52 100%);
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-
+/* 错误信息样式 */
 .error-message {
-  margin-top: 16px;
-  padding: 12px;
-  background: #fff5f5;
-  border: 1px solid #fed7d7;
-  border-radius: 8px;
-  border-left: 4px solid #e53e3e;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(255, 255, 255, 0.95);
+  padding: 20px 30px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 0, 0, 0.2);
+  z-index: 1001;
+  max-width: 400px;
+  text-align: center;
 }
 
-.error-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  color: #e53e3e;
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.error-icon {
-  width: 16px;
-  height: 16px;
-  stroke-width: 2;
-}
-
-.error-text {
+.error-message p {
   margin: 0;
-  color: #c53030;
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-/* 滚动条样式 */
-.panel-content::-webkit-scrollbar {
-  width: 6px;
-}
-
-.panel-content::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
-}
-
-.panel-content::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
-}
-
-.panel-content::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  color: #e53e3e;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-  .playback-panel {
-    width: calc(100vw - 20px);
-    max-width: 380px;
-    top: 60px;
-    right: 10px;
+  .demo-title {
+    top: 20px;
+    left: 20px;
+  }
+  
+  .demo-title h1 {
+    font-size: 22px;
+  }
+  
+  .demo-title h3 {
+    font-size: 14px;
+  }
+  
+  .main-control {
+    bottom: 15px;
+    right: 15px;
+  }
+  
+  .start-btn {
+    padding: 10px 16px;
+    height: 44px;
+    font-size: 14px;
+    min-width: 120px;
   }
 
-  .playback-panel.collapsed {
-    width: 50px;
+  /* 移动端速度选择器优化 */
+  .speed-selector-container {
+    padding: 12px 16px;
+    gap: 12px;
+  flex-direction: column;
+  align-items: center;
   }
-
-  .control-buttons {
-    flex-direction: column;
+  
+  .speed-label {
+    font-size: 14px;
   }
+  
+  .speed-options {
+    gap: 8px;
+  width: 100%;
+    justify-content: center;
+  }
+  
+  .speed-option-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+    min-width: 80px;
+    flex: 1;
+    max-width: 100px;
+}
 
-  .control-btn {
-    justify-content: flex-start;
-    padding: 12px;
+.error-message {
+    max-width: calc(100vw - 40px);
+    padding: 16px 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* 超小屏设备优化 */
+  .speed-selector-container {
+    padding: 10px 12px;
+  gap: 8px;
+  }
+  
+  .speed-label {
+  font-size: 13px;
+  }
+  
+  .speed-option-btn {
+    padding: 6px 10px;
+    font-size: 11px;
+    min-width: 70px;
+  }
+  
+  .start-btn {
+    padding: 8px 12px;
+    height: 40px;
+    font-size: 13px;
+    min-width: 100px;
   }
 }
 </style>

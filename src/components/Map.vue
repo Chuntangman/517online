@@ -1,19 +1,20 @@
 <template>
   <div class="map-wrapper">
-    <!-- 3D切换按钮 - 左上角 -->
-    <div class="mode-toggle-button" @click="toggleMapMode" :title="mapMode === '2D' ? '切换到3D地形' : '切换到2D平面'">
-      <svg v-if="mapMode === '2D'" class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <!-- 3D立体图标 -->
-        <path d="M12 2L2 7v10l10 5 10-5V7L12 2z"/>
-        <path d="M2 7l10 5 10-5"/>
-        <path d="M12 12v10"/>
+    <!-- 卫星图层切换按钮 - 左上角 -->
+    <div class="mode-toggle-button" @click="toggleMapMode" :title="mapMode === 'normal' ? '切换到卫星图层' : '切换到标准地图'">
+      <svg v-if="mapMode === 'normal'" class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <!-- 卫星图标 -->
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"/>
+        <path d="m19.07 4.93-4.24 4.24m0 5.66 4.24 4.24M4.93 4.93l4.24 4.24m5.66 0 4.24-4.24"/>
       </svg>
       <svg v-else class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <!-- 2D平面图标 -->
-        <rect x="3" y="3" width="18" height="18" rx="2"/>
-        <path d="M9 9h6v6H9z"/>
+        <!-- 地图图标 -->
+        <path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"/>
+        <polyline points="8,2 8,18"/>
+        <polyline points="16,6 16,22"/>
       </svg>
-      <span class="mode-text">{{ mapMode === '2D' ? '3D' : '2D' }}</span>
+      <span class="mode-text">{{ mapMode === 'normal' ? '卫星' : '地图' }}</span>
     </div>
 
     <!-- 骑行导航切换按钮 - 左上角第二个 -->
@@ -32,8 +33,8 @@
       <span class="trajectory-text">轨迹</span>
     </div>
     
-    <!-- 地图样式选择器 - 右上角 -->
-    <div class="map-controls">
+    <!-- 地图样式选择器 - 右上角（仅在标准模式下显示） -->
+    <div class="map-controls" v-show="mapMode === 'normal'">
       <div class="style-selector">
         <label>地图样式:</label>
         <select v-model="currentStyle" @change="changeMapStyle">
@@ -77,6 +78,7 @@
       @playback-paused="handlePlaybackPaused"
       @playback-stopped="handlePlaybackStopped"
       @playback-completed="handlePlaybackCompleted"
+      @map-reinitialization-needed="handleMapReinitializationNeeded"
       ref="trajectoryPlaybackRef"
     />
 
@@ -100,6 +102,7 @@
 <script setup>
 import { onMounted, onUnmounted, nextTick, ref, watch } from 'vue'
 import axios from 'axios'
+import AMapLoader from '@amap/amap-jsapi-loader'
 import CyclingNavigation from './CyclingNavigation.vue'
 import TrajectoryPlayback from './TrajectoryPlayback.vue'
 import RouteInfoPanel from './RouteInfoPanel.vue'
@@ -115,8 +118,8 @@ const props = defineProps({
 
 // 当前地图样式
 const currentStyle = ref('fresh')
-// 地图模式 (2D/3D)
-const mapMode = ref('2D')
+// 地图模式 (normal/satellite)
+const mapMode = ref('normal')
 // 地图实例
 const mapInstance = ref(null)
 // 地图初始化状态
@@ -728,6 +731,12 @@ const initMap = async (retryCount = 0, savedCenter = null, savedZoom = null) => 
   try {
     console.log(`开始初始化地图 (尝试第 ${retryCount + 1} 次)，模式: ${mapMode.value}`)
     
+    // 检查网络连接
+    if (!navigator.onLine) {
+      console.error('网络连接不可用，无法加载地图')
+      throw new Error('网络连接不可用')
+    }
+    
     // 检查容器是否准备就绪
     if (!isContainerReady()) {
       if (retryCount < 3) {
@@ -748,50 +757,76 @@ const initMap = async (retryCount = 0, savedCenter = null, savedZoom = null) => 
     }
 
     // 获取或加载AMap实例，避免重复加载
-    let AMap = globalAMapInstance
+    let AMap = globalAMapInstance || window.AMap
     if (!AMap) {
       console.log('首次加载AMap API')
-      AMap = await AMapLoader.load({
-        key: 'b7fb4f223f6cbffc2d995a508d10f7cd',
-        version: '2.1Beta', // 统一使用2.1Beta版本，同时支持2D和3D
-        plugins: ['AMap.Riding', 'AMap.MoveAnimation'] // 加载骑行导航和轨迹动画插件
-      })
-      globalAMapInstance = AMap
-      console.log('AMap API加载完成并缓存（包含骑行导航插件）')
+      try {
+        AMap = await AMapLoader.load({
+          key: 'b7fb4f223f6cbffc2d995a508d10f7cd',
+          version: '2.1Beta', // 统一使用2.1Beta版本
+          plugins: ['AMap.Riding', 'AMap.MoveAnimation', 'AMap.TileLayer'], // 加载骑行导航、轨迹动画和图层插件
+          Loca: {
+            version: '2.0.0' // 加载 Loca 库用于镜头追踪
+          }
+        })
+        globalAMapInstance = AMap
+        console.log('AMap API加载完成并缓存（包含图层插件和Loca库）')
+        console.log('AMap对象:', AMap)
+        console.log('Loca对象:', window.Loca)
+      } catch (loadError) {
+        console.warn('AMapLoader.load 警告:', loadError)
+        
+        // 检查是否全局AMap已经可用（即使加载器报错）
+        if (window.AMap && typeof window.AMap.Map === 'function') {
+          console.log('检测到全局AMap可用，继续使用')
+          AMap = window.AMap
+          globalAMapInstance = AMap
+        } else {
+          console.error('AMap确实加载失败')
+          throw new Error(`AMap API加载失败: ${loadError?.message || loadError || '未知错误'}`)
+        }
+      }
     } else {
       console.log('使用缓存的AMap实例')
     }
 
-    // 根据地图模式设置不同的配置
-    const mapConfig = {
+    // 根据地图模式设置不同的图层配置
+    let layers = []
+    let mapConfig = {
       dragEnable: true,      // 启用地图拖拽
       zoomEnable: true,      // 启用地图缩放
       doubleClickZoom: true, // 启用双击放大
       keyboard: true,        // 启用键盘操作
       scrollWheel: true,     // 启用鼠标滚轮缩放
-      mapStyle: `amap://styles/${currentStyle.value}`,
       center: savedCenter || [116.397428, 39.90923], // 使用保存的中心点或默认中心点
-      zoom: savedZoom || 11 // 使用保存的缩放级别或默认值
+      zoom: savedZoom || 11, // 使用保存的缩放级别或默认值
+      viewMode: '2D'         // 统一使用2D视图
     }
 
-    if (mapMode.value === '3D') {
-      // 3D地形图配置
-      Object.assign(mapConfig, {
-        viewMode: '3D',        // 3D视图模式
-        terrain: true,         // 开启地形图
-        pitch: 50,            // 地图俯仰角度
-        rotateEnable: true,   // 启用地图旋转交互
-        pitchEnable: true,    // 启用地图倾斜交互
-        rotation: -15,        // 初始地图顺时针旋转角度
-        zooms: [2, 20]        // 地图显示的缩放级别范围
-      })
+    if (mapMode.value === 'satellite') {
+      // 卫星图层模式
+      const satellite = new AMap.TileLayer.Satellite()
+      const roadNet = new AMap.TileLayer.RoadNet()
+      layers = [satellite, roadNet]
+      console.log('使用卫星图层 + 路网图层')
     } else {
-      // 2D平面图配置
-      mapConfig.viewMode = '2D'
+      // 标准地图模式
+      mapConfig.mapStyle = `amap://styles/${currentStyle.value}`
+      console.log('使用标准地图样式:', currentStyle.value)
+    }
+
+    // 设置图层
+    if (layers.length > 0) {
+      mapConfig.layers = layers
     }
 
     console.log('地图配置:', mapConfig)
     const map = new AMap.Map('container', mapConfig)
+
+    // 验证地图实例是否创建成功
+    if (!map || typeof map.getContainer !== 'function') {
+      throw new Error('地图实例创建失败')
+    }
 
     // 等待地图完全加载
     map.on('complete', async () => {
@@ -800,11 +835,6 @@ const initMap = async (retryCount = 0, savedCenter = null, savedZoom = null) => 
       
       // 添加地图控制插件
       await addMapControls(map)
-      
-      // 在3D模式下添加中键拖拽支持
-      if (mapMode.value === '3D') {
-        setupMiddleMouseDrag(map)
-      }
       
       // 获取驿站和目标点数据
       await fetchWaystations()
@@ -819,97 +849,34 @@ const initMap = async (retryCount = 0, savedCenter = null, savedZoom = null) => 
 
     // 保存地图实例
     mapInstance.value = map
+    console.log('地图实例创建成功')
     
     return map
   } catch (error) {
-    console.error('地图加载失败：', error)
+    // 检查地图是否实际上已经成功创建
+    if (mapInstance.value && typeof mapInstance.value.getContainer === 'function') {
+      console.warn('虽然有错误，但地图实例已成功创建，继续使用')
+      return mapInstance.value
+    }
+    
+    console.error('地图加载失败：', error || '未知错误')
+    console.error('错误详情：', {
+      message: error?.message || '无错误信息',
+      stack: error?.stack || '无堆栈信息',
+      errorType: typeof error
+    })
     isMapInitialized.value = false
+    
+    // 尝试重新初始化（最多重试一次）
+    if (retryCount === 0) {
+      console.log('尝试重新初始化地图...')
+      setTimeout(() => {
+        initMap(1, savedCenter, savedZoom)
+      }, 2000)
+    }
   }
 }
 
-// 设置中键拖拽支持
-const setupMiddleMouseDrag = (map) => {
-  console.log('设置3D地图中键拖拽支持')
-  
-  const container = map.getContainer()
-  let isDragging = false
-  let startX = 0
-  let startY = 0
-  let startRotation = 0
-  let startPitch = 0
-  
-  // 禁用默认的右键和Ctrl+左键交互
-  container.addEventListener('contextmenu', (e) => {
-    if (mapMode.value === '3D') {
-      e.preventDefault()
-    }
-  })
-  
-  // 中键按下
-  container.addEventListener('mousedown', (e) => {
-    if (e.button === 1) { // 中键
-      e.preventDefault()
-      e.stopPropagation()
-      isDragging = true
-      startX = e.clientX
-      startY = e.clientY
-      startRotation = map.getRotation()
-      startPitch = map.getPitch()
-      container.style.cursor = 'grabbing'
-      console.log('开始中键拖拽')
-    }
-  })
-  
-  // 防止中键点击时的默认行为（如打开新标签页）
-  container.addEventListener('auxclick', (e) => {
-    if (e.button === 1) {
-      e.preventDefault()
-      e.stopPropagation()
-    }
-  })
-  
-  // 鼠标移动
-  container.addEventListener('mousemove', (e) => {
-    if (isDragging && e.buttons === 4) { // 中键按下状态
-      e.preventDefault()
-      
-      const deltaX = e.clientX - startX
-      const deltaY = e.clientY - startY
-      
-      // 计算新的旋转角度 (水平移动控制旋转)
-      const rotationSensitivity = 0.5
-      const newRotation = startRotation + (deltaX * rotationSensitivity)
-      
-      // 计算新的俯仰角度 (垂直移动控制俯仰)
-      const pitchSensitivity = 0.3
-      const newPitch = Math.max(0, Math.min(83, startPitch - (deltaY * pitchSensitivity)))
-      
-      // 应用新的视角
-      map.setRotation(newRotation)
-      map.setPitch(newPitch)
-    }
-  })
-  
-  // 中键释放
-  container.addEventListener('mouseup', (e) => {
-    if (e.button === 1 && isDragging) {
-      isDragging = false
-      container.style.cursor = 'grab'
-      console.log('结束中键拖拽')
-    }
-  })
-  
-  // 鼠标离开地图容器
-  container.addEventListener('mouseleave', () => {
-    if (isDragging) {
-      isDragging = false
-      container.style.cursor = 'grab'
-    }
-  })
-  
-  // 设置初始鼠标样式
-  container.style.cursor = 'grab'
-}
 
 // 添加地图控制插件
 const addMapControls = async (map) => {
@@ -919,15 +886,15 @@ const addMapControls = async (map) => {
     // 异步加载控制插件
     AMap.plugin(['AMap.ControlBar', 'AMap.ToolBar'], function () {
       try {
-        // 地图旋转控制插件 (在3D模式下更有用)
+        // 地图方向控制插件
         const controlBarConfig = {
           position: {
             right: '10px',
             top: '80px' // 调整位置避免与地图控制器重叠
           },
-          showControlButton: mapMode.value === '3D', // 3D模式显示倾斜、旋转控制
-          showZoomBar: false,      // 不显示缩放条（由ToolBar处理）
-          showDirectionButton: true // 显示指北针
+          showControlButton: false,    // 不显示倾斜、旋转控制（卫星模式不需要）
+          showZoomBar: false,          // 不显示缩放条（由ToolBar处理）
+          showDirectionButton: true    // 显示指北针
         }
         
         const controlBar = new AMap.ControlBar(controlBarConfig)
@@ -936,7 +903,7 @@ const addMapControls = async (map) => {
         const toolBarConfig = {
           position: {
             right: '10px',
-            top: mapMode.value === '3D' ? '140px' : '110px' // 根据ControlBar调整位置
+            top: '110px' // 固定位置
           },
           ruler: false,        // 不显示标尺
           noIpLocate: true,    // 不显示定位按钮
@@ -953,7 +920,7 @@ const addMapControls = async (map) => {
         map.addControl(toolBar)
         
         console.log(`地图控制插件加载完成 (${mapMode.value}模式)`)
-        console.log('- ControlBar 3D控制:', mapMode.value === '3D' ? '启用' : '禁用')
+        console.log('- ControlBar 方向控制: 启用')
         console.log('- ToolBar 缩放控制: 启用')
         
         resolve()
@@ -966,18 +933,21 @@ const addMapControls = async (map) => {
   })
 }
 
-// 切换地图样式
+// 切换地图样式（仅在标准模式下生效）
 const changeMapStyle = () => {
-  if (mapInstance.value) {
+  if (mapInstance.value && mapMode.value === 'normal') {
     mapInstance.value.setMapStyle(`amap://styles/${currentStyle.value}`)
+    console.log('地图样式已更新为:', currentStyle.value)
+  } else if (mapMode.value === 'satellite') {
+    console.log('卫星模式下不支持样式切换')
   }
 }
 
-// 切换地图视图模式 (2D/3D)
+// 切换地图图层模式 (normal/satellite)
 const toggleMapMode = async () => {
   // 切换模式
-  const newMode = mapMode.value === '2D' ? '3D' : '2D'
-  console.log('切换地图模式:', mapMode.value, '→', newMode)
+  const newMode = mapMode.value === 'normal' ? 'satellite' : 'normal'
+  console.log('切换地图图层模式:', mapMode.value, '→', newMode)
   
   if (!mapInstance.value) {
     console.warn('地图实例不存在，无法切换模式')
@@ -1005,15 +975,12 @@ const toggleMapMode = async () => {
     // 重新初始化地图
     await initMap(0, center, zoom)
     
-    // 如果切换到3D模式，确保中键拖拽功能正常
-    if (newMode === '3D' && mapInstance.value) {
-      setupMiddleMouseDrag(mapInstance.value)
-    }
+    console.log(`地图已切换到${newMode === 'satellite' ? '卫星' : '标准'}模式`)
     
   } catch (error) {
     console.error('切换地图模式失败:', error)
     // 如果切换失败，恢复到原来的状态
-    mapMode.value = mapMode.value === '2D' ? '3D' : '2D'
+    mapMode.value = mapMode.value === 'normal' ? 'satellite' : 'normal'
     await nextTick()
     await initMap()
   }
@@ -1866,6 +1833,46 @@ const handlePlaybackCompleted = () => {
   // 比如显示完成提示、恢复地图状态等
 }
 
+// 处理地图重新初始化需求事件
+const handleMapReinitializationNeeded = async () => {
+  console.log('轨迹回放组件请求重新初始化地图')
+  
+  try {
+    // 保存当前地图状态
+    let savedCenter = null
+    let savedZoom = null
+    
+    if (mapInstance.value) {
+      try {
+        savedCenter = mapInstance.value.getCenter()
+        savedZoom = mapInstance.value.getZoom()
+        console.log('保存地图状态:', { center: savedCenter, zoom: savedZoom })
+      } catch (error) {
+        console.warn('无法保存地图状态:', error)
+      }
+    }
+    
+    // 重新初始化地图
+    await reinitializeMap()
+    
+    // 如果有保存的状态，尝试恢复
+    if (savedCenter && savedZoom && mapInstance.value) {
+      setTimeout(() => {
+        try {
+          mapInstance.value.setZoomAndCenter(savedZoom, savedCenter)
+          console.log('地图状态已恢复')
+        } catch (error) {
+          console.warn('恢复地图状态失败:', error)
+        }
+      }, 1000)
+    }
+    
+    console.log('地图重新初始化完成')
+  } catch (error) {
+    console.error('地图重新初始化失败:', error)
+  }
+}
+
 // 通过编程方式加载预设轨迹（供外部调用）
 const loadPresetTrajectory = (index) => {
   if (trajectoryPlaybackRef.value) {
@@ -1898,7 +1905,57 @@ const setAndLoadCustomTrajectory = async (path) => {
   }
 }
 
-// 直接播放轨迹动画（不显示控制面板）
+// 创建平滑轨迹路径（用于轨迹回放）
+const createSmoothTrajectoryPath = (trajectoryPath) => {
+  if (!trajectoryPath || trajectoryPath.length < 2) {
+    return []
+  }
+  
+  // 将轨迹点转换为带有经纬度属性的对象格式
+  const points = trajectoryPath.map(([lng, lat]) => ({
+    longitude: lng,
+    latitude: lat
+  }))
+  
+  // 复用现有的贝塞尔曲线构建逻辑
+  return buildBezierPath(points)
+}
+
+// 生成平滑的动画路径点（在原始点之间插值）
+const generateSmoothAnimationPath = (originalPath) => {
+  if (!originalPath || originalPath.length < 2) {
+    return originalPath
+  }
+  
+  const smoothPath = []
+  
+  // 在每两个原始点之间插入中间点
+  for (let i = 0; i < originalPath.length - 1; i++) {
+    const start = originalPath[i]
+    const end = originalPath[i + 1]
+    
+    // 添加起点
+    smoothPath.push(start)
+    
+    // 在两点之间插入中间点
+    const steps = 5 // 每段插入5个中间点
+    for (let j = 1; j < steps; j++) {
+      const t = j / steps
+      const interpolatedPoint = [
+        start[0] + (end[0] - start[0]) * t,
+        start[1] + (end[1] - start[1]) * t
+      ]
+      smoothPath.push(interpolatedPoint)
+    }
+  }
+  
+  // 添加最后一个点
+  smoothPath.push(originalPath[originalPath.length - 1])
+  
+  return smoothPath
+}
+
+// 直接播放轨迹动画（使用轨迹回放组件）
 const directTrajectoryPlayback = async (trajectoryPath, name = '轨迹回放') => {
   console.log('=== Map.vue 直接轨迹回放 ===')
   console.log('轨迹路径:', trajectoryPath)
@@ -1910,110 +1967,27 @@ const directTrajectoryPlayback = async (trajectoryPath, name = '轨迹回放') =
   }
   
   try {
-    // 确保已加载动画插件
-    if (!window.AMap.MoveAnimation) {
-      await new Promise((resolve) => {
-        AMap.plugin('AMap.MoveAnimation', () => {
-          console.log('MoveAnimation 插件加载成功')
-          resolve()
-        })
-      })
+    // 显示轨迹回放组件
+    if (!showTrajectory.value) {
+      showTrajectory.value = true
+      // 等待组件渲染
+      await nextTick()
     }
     
-    // 创建自行车图标
-    const createBicycleIcon = () => {
-      const bicycleSvg = `
-        <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-          <!-- 自行车轮子 -->
-          <circle cx="8" cy="22" r="6" fill="none" stroke="#333" stroke-width="2"/>
-          <circle cx="24" cy="22" r="6" fill="none" stroke="#333" stroke-width="2"/>
-          <!-- 车轮中心 -->
-          <circle cx="8" cy="22" r="1.5" fill="#333"/>
-          <circle cx="24" cy="22" r="1.5" fill="#333"/>
-          <!-- 车架 -->
-          <line x1="8" y1="22" x2="16" y2="12" stroke="#4CAF50" stroke-width="2.5" stroke-linecap="round"/>
-          <line x1="16" y1="12" x2="24" y2="22" stroke="#4CAF50" stroke-width="2.5" stroke-linecap="round"/>
-          <line x1="16" y1="12" x2="16" y2="6" stroke="#4CAF50" stroke-width="2.5" stroke-linecap="round"/>
-          <line x1="8" y1="22" x2="24" y2="22" stroke="#4CAF50" stroke-width="2" stroke-linecap="round"/>
-          <!-- 座椅 -->
-          <line x1="12" y1="16" x2="18" y2="16" stroke="#333" stroke-width="3" stroke-linecap="round"/>
-          <line x1="15" y1="16" x2="15" y2="12" stroke="#333" stroke-width="2"/>
-          <!-- 把手 -->
-          <line x1="14" y1="6" x2="18" y2="6" stroke="#333" stroke-width="3" stroke-linecap="round"/>
-          <!-- 踏板 -->
-          <circle cx="16" cy="19" r="2" fill="none" stroke="#666" stroke-width="1.5"/>
-          <line x1="14" y1="19" x2="18" y2="19" stroke="#666" stroke-width="2"/>
-        </svg>
-      `
-      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(bicycleSvg)
-    }
-    
-    // 清除现有的轨迹回放标记和线条
-    if (window.directPlaybackMarker) {
-      window.directPlaybackMarker.setMap(null)
-      window.directPlaybackMarker = null
-    }
-    if (window.directPlaybackPolyline) {
-      window.directPlaybackPolyline.setMap(null)
-      window.directPlaybackPolyline = null
-    }
-    if (window.directPassedPolyline) {
-      window.directPassedPolyline.setMap(null)
-      window.directPassedPolyline = null
-    }
-    
-    // 创建轨迹标记
-    window.directPlaybackMarker = new AMap.Marker({
-      map: mapInstance.value,
-      position: trajectoryPath[0],
-      icon: createBicycleIcon(),
-      offset: new AMap.Pixel(-16, -16),
-      anchor: 'center'
-    })
-    
-    // 绘制完整轨迹线
-    window.directPlaybackPolyline = new AMap.Polyline({
-      map: mapInstance.value,
-      path: trajectoryPath,
-      showDir: true,
-      strokeColor: "#28F",
-      strokeWeight: 6,
-      strokeOpacity: 0.8
-    })
-    
-    // 创建已走轨迹线
-    window.directPassedPolyline = new AMap.Polyline({
-      map: mapInstance.value,
-      strokeColor: "#AF5",
-      strokeWeight: 6,
-      strokeOpacity: 0.9
-    })
-    
-    // 监听移动事件
-    window.directPlaybackMarker.on('moving', (e) => {
-      if (window.directPassedPolyline) {
-        window.directPassedPolyline.setPath(e.passedPath)
+    // 使用轨迹回放组件加载并开始轨迹
+    if (trajectoryPlaybackRef.value) {
+      const success = await trajectoryPlaybackRef.value.setAndLoadCustomTrajectory(trajectoryPath, name)
+      if (success) {
+        // 自动开始轨迹追踪
+        setTimeout(() => {
+          if (trajectoryPlaybackRef.value) {
+            trajectoryPlaybackRef.value.startAnimation()
+          }
+        }, 500)
       }
-      // 地图跟随
-      mapInstance.value.setCenter(e.target.getPosition(), true)
-    })
-    
-    // 监听动画完成事件
-    window.directPlaybackMarker.on('moveend', () => {
-      console.log('直接轨迹回放完成')
-    })
-    
-    // 调整地图视野
-    mapInstance.value.setFitView([window.directPlaybackMarker, window.directPlaybackPolyline])
-    
-    // 等待一下让地图调整完成，然后开始动画
-    setTimeout(() => {
-      console.log('开始直接轨迹回放动画')
-      window.directPlaybackMarker.moveAlong(trajectoryPath, {
-        duration: 500, // 每段的时长（毫秒）
-        autoRotation: true, // 自动旋转
-      })
-    }, 1000)
+    } else {
+      console.error('轨迹回放组件引用不存在')
+    }
     
     console.log('直接轨迹回放设置完成')
     
@@ -2027,23 +2001,14 @@ const directTrajectoryPlayback = async (trajectoryPath, name = '轨迹回放') =
 const clearDirectTrajectoryPlayback = () => {
   console.log('清除直接轨迹回放')
   
-  // 清除标记
-  if (window.directPlaybackMarker) {
-    window.directPlaybackMarker.setMap(null)
-    window.directPlaybackMarker = null
+  // 停止并清除轨迹回放组件
+  if (trajectoryPlaybackRef.value) {
+    trajectoryPlaybackRef.value.stopAnimation()
+    trajectoryPlaybackRef.value.clearTrajectory()
   }
   
-  // 清除轨迹线
-  if (window.directPlaybackPolyline) {
-    window.directPlaybackPolyline.setMap(null)
-    window.directPlaybackPolyline = null
-  }
-  
-  // 清除已走轨迹线
-  if (window.directPassedPolyline) {
-    window.directPassedPolyline.setMap(null)
-    window.directPassedPolyline = null
-  }
+  // 隐藏轨迹回放组件
+  showTrajectory.value = false
 }
 
 // 开始轨迹回放（供外部调用）

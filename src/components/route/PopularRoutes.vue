@@ -174,7 +174,7 @@ import { usePopularRoutes } from '@/composables/usePopularRoutes.js'
 const API_BASE_URL = 'http://localhost:3000/api/v1'
 
 // 发射事件到父组件
-const emit = defineEmits(['route-selected', 'route-visualize', 'trajectory-playback', 'route-navigate-with-markers'])
+const emit = defineEmits(['route-selected', 'route-visualize', 'trajectory-playback', 'route-navigate-with-markers', 'clear-previous-displays'])
 
 // 使用热门路线组合式函数
 const { 
@@ -279,6 +279,10 @@ const viewRouteOnMap = () => {
     return
   }
   
+  // 首先清除之前的轨迹回放（如果有的话）
+  console.log('清除之前的轨迹回放...')
+  emit('clear-previous-displays')
+  
   console.log('使用导航功能显示路线:', selectedRouteDetail.value)
   
   // 获取有效的途径点
@@ -346,6 +350,10 @@ const startTrajectoryPlayback = () => {
     return
   }
   
+  // 首先清除之前的路线显示（如果有的话）
+  console.log('清除之前的路线显示...')
+  emit('clear-previous-displays')
+  
   console.log('原始途径点数据:', selectedRouteDetail.value.waypoints)
   console.log('途径点数量:', selectedRouteDetail.value.waypoints.length)
   
@@ -387,13 +395,34 @@ const startTrajectoryPlayback = () => {
   }
   
   // 转换为轨迹回放需要的格式 [[经度, 纬度], [经度, 纬度], ...]
-  const trajectoryPath = validWaypoints.map(wp => {
+  const basicPath = validWaypoints.map(wp => {
     const lng = parseFloat(wp.longitude);
     const lat = parseFloat(wp.latitude);
     console.log(`转换途径点 ${wp.name}: [${lng}, ${lat}]`)
     return [lng, lat];
   })
   
+  // 为了让轨迹更加平滑和密集，在途径点之间插入中间点
+  const trajectoryPath = []
+  for (let i = 0; i < basicPath.length; i++) {
+    trajectoryPath.push(basicPath[i])
+    
+    // 在相邻两点之间插入中间点（除了最后一个点）
+    if (i < basicPath.length - 1) {
+      const currentPoint = basicPath[i]
+      const nextPoint = basicPath[i + 1]
+      
+      // 插入2个中间点，让路径更平滑
+      for (let j = 1; j <= 2; j++) {
+        const ratio = j / 3
+        const interpolatedLng = currentPoint[0] + (nextPoint[0] - currentPoint[0]) * ratio
+        const interpolatedLat = currentPoint[1] + (nextPoint[1] - currentPoint[1]) * ratio
+        trajectoryPath.push([interpolatedLng, interpolatedLat])
+      }
+    }
+  }
+  
+  console.log(`原始途径点数: ${basicPath.length}, 插值后轨迹点数: ${trajectoryPath.length}`)
   console.log('最终轨迹路径:', trajectoryPath)
   
   // 发射轨迹回放事件到父组件
