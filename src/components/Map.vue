@@ -107,6 +107,7 @@ import CyclingNavigation from './CyclingNavigation.vue'
 import TrajectoryPlayback from './TrajectoryPlayback.vue'
 import RouteInfoPanel from './RouteInfoPanel.vue'
 import { useElevation } from '@/composables/useElevation'
+import simplifiedAnalytics from '@/utils/simplifiedAnalytics'
 
 // Props
 const props = defineProps({
@@ -157,6 +158,8 @@ const {
 // 跳转到指定位置
 const jumpToLocation = (longitude, latitude, markerType = 'waystation') => {
   console.log('Map.vue - jumpToLocation 被调用:', { longitude, latitude, markerType })
+  
+  // 不再记录通用地图交互，只记录有价值的导航和路线相关行为
   
   if (!mapInstance.value) {
     console.error('Map.vue - 地图实例未初始化，无法跳转到指定位置')
@@ -949,6 +952,8 @@ const toggleMapMode = async () => {
   const newMode = mapMode.value === 'normal' ? 'satellite' : 'normal'
   console.log('切换地图图层模式:', mapMode.value, '→', newMode)
   
+  // 不再记录通用地图模式切换，只记录有价值的导航和路线相关行为
+  
   if (!mapInstance.value) {
     console.warn('地图实例不存在，无法切换模式')
     return
@@ -1405,6 +1410,8 @@ const clearRouteCurve = () => {
 // 组件挂载后初始化地图
 onMounted(async () => {
   console.log('Map组件挂载')
+  
+  // 不再记录通用页面访问，只记录有价值的导航和路线相关行为
   
   // 为独立地图页面添加特殊类名
   if (window.location.pathname === '/map') {

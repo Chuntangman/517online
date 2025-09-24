@@ -150,6 +150,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
+import simplifiedAnalytics from '@/utils/simplifiedAnalytics'
 
 const API_BASE_URL = 'http://localhost:3000/api/v1'
 
@@ -158,11 +159,27 @@ const props = defineProps({
   route: {
     type: Object,
     required: true
+  },
+  smartParams: {
+    type: Object,
+    default: () => ({})
+  },
+  difficultyText: {
+    type: String,
+    default: 'medium'
+  },
+  weatherScore: {
+    type: Number,
+    default: 6
+  },
+  matchedRoutesCount: {
+    type: Number,
+    default: 0
   }
 })
 
 // Emits
-const emit = defineEmits(['close', 'route-selected', 'trajectory-playback'])
+const emit = defineEmits(['close', 'route-selected', 'trajectory-playback', 'route-navigate-with-markers', 'clear-previous-displays'])
 
 // 状态管理
 const waypoints = ref([])
@@ -241,7 +258,7 @@ const handleModalClick = (event) => {
 }
 
 // 在地图上查看路线
-const viewRouteOnMap = () => {
+const viewRouteOnMap = async () => {
   if (!canShowOnMap.value) {
     alert('该路线缺少有效的经纬度信息，无法在地图上显示')
     return
@@ -268,7 +285,38 @@ const viewRouteOnMap = () => {
     return
   }
   
-  // 发射路线选择事件
+  // 记录用户选择了智能匹配的路线（包含完整的匹配参数）
+  try {
+    // 将中文难度转换为英文
+    const difficultyMap = {
+      '简单': 'easy',
+      '中等': 'medium', 
+      '困难': 'hard'
+    }
+    
+    const trackData = {
+      preferred_difficulty: difficultyMap[props.difficultyText] || 'medium',
+      scenery_preference: props.smartParams?.sceneryPriority ? parseInt(props.smartParams.sceneryPriority) : 7,
+      preferred_days_min: props.smartParams?.days ? parseInt(props.smartParams.days) : 3,
+      preferred_days_max: props.smartParams?.days ? parseInt(props.smartParams.days) : 3,
+      weather_preference: props.weatherScore >= 7 ? 'good' : props.weatherScore >= 4 ? 'fair' : 'poor',
+      matched_routes_count: props.matchedRoutesCount || 1, // 智能匹配返回的路线总数
+      selected_route_id: props.route?.id,
+      selected_route_name: props.route?.name
+    }
+    
+    console.log('📊 智能匹配路线选择记录:', trackData)
+    
+    await simplifiedAnalytics.trackSmartRouteMatch(trackData)
+  } catch (error) {
+    console.warn('记录路线选择失败:', error)
+  }
+  
+  // 首先清除之前的轨迹回放（如果有的话）
+  console.log('清除之前的轨迹回放...')
+  emit('clear-previous-displays')
+  
+  // 发射使用导航功能的事件到父组件
   const routeData = {
     route: props.route,
     waypoints: waypoints.value,
@@ -277,12 +325,27 @@ const viewRouteOnMap = () => {
     endPoint: validWaypoints[validWaypoints.length - 1]
   }
   
-  emit('route-selected', routeData)
+  console.log('=== 发射 route-navigate-with-markers 事件 ===')
+  console.log('事件数据:', routeData)
+  
+  emit('route-navigate-with-markers', routeData)
+  
+  // 保留原有的route-selected事件以保持兼容性
+  emit('route-selected', {
+    id: props.route?.id,
+    title: props.route?.name || '未知路线',
+    region: props.route?.region || '未知',
+    distance: props.route?.distance_km ? `${props.route.distance_km}km` : '未知',
+    duration: props.route?.estimated_days ? `${props.route.estimated_days}天` : '未知',
+    roadCondition: props.route?.road_condition || '未知',
+    waypoints: waypoints.value
+  })
+  
   closeModal()
 }
 
 // 开始轨迹回放
-const startTrajectoryPlayback = () => {
+const startTrajectoryPlayback = async () => {
   if (!canPlayTrajectory.value) {
     alert('轨迹回放失败：有效途径点不足（需要至少2个点）')
     return
@@ -309,7 +372,15 @@ const startTrajectoryPlayback = () => {
     route: props.route,
     waypoints: waypoints.value,
     trajectoryPath: trajectoryPath,
-    name: props.route?.name || '智能匹配路线轨迹'
+    name: props.route?.name || '智能匹配路线轨迹',
+    source: 'smart_match'
+  }
+  
+  // 记录轨迹回放使用
+  try {
+    await simplifiedAnalytics.trackTrajectoryPlayback(trajectoryData)
+  } catch (error) {
+    console.warn('记录轨迹回放失败:', error)
   }
   
   emit('trajectory-playback', trajectoryData)

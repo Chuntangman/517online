@@ -46,7 +46,7 @@
           </div>
           <button 
             class="card-button"
-            @click="handleCardClick(image, index)"
+            @click="handleCardClick(image, index, $event)"
           >
             开始探索
           </button>
@@ -61,6 +61,7 @@
 import { ref, reactive, shallowReactive, onMounted, onUnmounted, nextTick, customRef } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
+import simplifiedAnalytics from '@/utils/simplifiedAnalytics'
 
 // 时间分片处理器
 class TimeSlicingScheduler {
@@ -185,23 +186,8 @@ const fetchHomepageImages = async () => {
       })
     }
   } catch (error) {
-    // 如果API调用失败，使用默认数据
-    images.value = [
-      { id: 1, '图片名': '主页图1', '介绍': '探索最美的骑行路线', '存储(根目录路径)': 'public\\主页图\\列车.jpg' },
-      { id: 2, '图片名': '主页图2', '介绍': '发现沿途的美景', '存储(根目录路径)': 'public\\主页图\\海岸.jpg' },
-      { id: 3, '图片名': '主页图3', '介绍': '感受自然的魅力', '存储(根目录路径)': 'public\\主页图\\殿堂.jpg' },
-      { id: 4, '图片名': '主页图4', '介绍': '享受骑行的乐趣', '存储(根目录路径)': 'public\\主页图\\牧场.jpg' }
-    ]
-    // 初始化卡片数据
-    images.value.forEach((_, index) => {
-      cardData[index] = {
-        width: 0,
-        height: 0,
-        mouseX: 0,
-        mouseY: 0,
-        mouseLeaveDelay: null
-      }
-    })
+    console.error('获取主页图片数据失败:', error)
+    throw error
   }
 }
 
@@ -447,6 +433,8 @@ const setupBicycleCursors = () => {
 
 // 组件挂载后初始化
 onMounted(async () => {
+  // 页面加载 - 不再记录通用页面访问，只记录有价值的用户行为
+  
   // 抑制第三方脚本错误和开发者工具警告
   suppressThirdPartyErrors()
   
@@ -648,7 +636,9 @@ onUnmounted(() => {
 })
 
 // 卡片按钮点击处理（支持不同页面跳转）
-const handleCardClick = (image, index) => {
+const handleCardClick = (image, index, event) => {
+  // 不再记录通用点击行为，只记录有价值的导航和路线相关行为
+  
   // 根据图片名或索引跳转到不同页面
   const routeMap = {
     '主页图1': '/route1',  // 可以根据需要修改路径

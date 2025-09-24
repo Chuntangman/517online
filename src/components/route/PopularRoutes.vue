@@ -170,6 +170,7 @@
 import { ref, computed } from 'vue'
 import axios from 'axios'
 import { usePopularRoutes } from '@/composables/usePopularRoutes.js'
+import simplifiedAnalytics from '@/utils/simplifiedAnalytics'
 
 const API_BASE_URL = 'http://localhost:3000/api/v1'
 
@@ -222,6 +223,20 @@ const canPlayTrajectory = computed(() => {
 // 处理路线卡片点击
 const handleRouteClick = async (route) => {
   console.log('点击路线:', route)
+  
+  // 记录热门路线点击行为
+  try {
+    await simplifiedAnalytics.trackPopularRouteClick({
+      route_id: route.id,
+      route_name: route.title,
+      route_region: route.region,
+      route_distance: route.distance,
+      route_duration: route.duration,
+      click_source: 'popular_routes'
+    })
+  } catch (error) {
+    console.warn('记录热门路线点击失败:', error)
+  }
   
   // 显示详情弹窗
   showRouteDetail.value = true
@@ -336,7 +351,7 @@ const viewRouteOnMap = () => {
 }
 
 // 开始轨迹回放
-const startTrajectoryPlayback = () => {
+const startTrajectoryPlayback = async () => {
   console.log('=== 开始轨迹回放调试 ===')
   console.log('selectedRouteDetail.value:', selectedRouteDetail.value)
   
@@ -430,10 +445,18 @@ const startTrajectoryPlayback = () => {
     route: selectedRouteDetail.value.route,
     waypoints: selectedRouteDetail.value.waypoints,
     trajectoryPath: trajectoryPath,
-    name: selectedRouteDetail.value.route?.name || '热门路线轨迹'
+    name: selectedRouteDetail.value.route?.name || '热门路线轨迹',
+    source: 'popular_routes'
   }
   
   console.log('发射轨迹回放事件:', trajectoryData)
+  
+  // 记录轨迹回放使用
+  try {
+    await simplifiedAnalytics.trackTrajectoryPlayback(trajectoryData)
+  } catch (error) {
+    console.warn('记录轨迹回放失败:', error)
+  }
   
   emit('trajectory-playback', trajectoryData)
   

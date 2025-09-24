@@ -12,6 +12,12 @@ require('dotenv').config();
 // 导入配置和中间件
 const { testConnection } = require('./config/database');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
+const { 
+  recordRouteNavigation,
+  recordPopularRouteClick,
+  recordSmartRouteMatch,
+  startDataCleanupTask 
+} = require('./middleware/simplifiedAnalyticsMiddleware');
 
 // 导入路由
 const waystationRoutes = require('./routes/waystationRoutes');
@@ -19,6 +25,7 @@ const imageRoutes = require('./routes/imageRoutes');
 const destinationRoutes = require('./routes/destinationRoutes');
 const routeRoutes = require('./routes/routeRoutes');
 const elevationRoutes = require('./routes/elevationRoutes');
+const simplifiedAnalyticsRoutes = require('./routes/simplifiedAnalyticsRoutes');
 
 // 创建 Express 应用
 const app = express();
@@ -67,6 +74,15 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.set('trust proxy', 1);
 
 /**
+ * 用户分析数据收集中间件
+ */
+// 页面访问追踪（在所有路由之前）
+// 应用精简分析中间件（只记录有价值的行为）
+app.use('/api/v1/routes', recordRouteNavigation);  // 路线导航记录
+app.use('/api/v1/routes', recordPopularRouteClick); // 热门路线点击记录
+app.use('/api/v1/routes', recordSmartRouteMatch);   // 智能路线匹配记录
+
+/**
  * 健康检查路由
  */
 app.get('/health', (req, res) => {
@@ -98,6 +114,9 @@ app.use(`${API_PREFIX}/routes`, routeRoutes);
 
 // 高程数据相关路由
 app.use(`${API_PREFIX}/elevation`, elevationRoutes);
+
+// 用户数据分析相关路由
+app.use(`${API_PREFIX}/analytics-simple`, simplifiedAnalyticsRoutes);
 
 /**
  * API 文档路由（开发环境）
@@ -148,6 +167,14 @@ if (NODE_ENV === 'development') {
           'GET /routes/statistics': '获取路线统计信息',
           'GET /routes/:id/waypoints': '获取路线的途径点详情',
           'GET /routes/:id': '获取单个路线详情'
+        },
+        'analytics-simple': {
+          'POST /analytics-simple/trajectory-playback': '记录轨迹回放使用',
+          'GET /analytics-simple/statistics/behavior': '获取用户行为统计',
+          'GET /analytics-simple/statistics/popular-routes': '获取热门路线统计',
+          'GET /analytics-simple/statistics/navigation-preferences': '获取导航偏好统计',
+          'GET /analytics-simple/report': '获取综合分析报告',
+          'GET /analytics-simple/health': '精简分析服务健康检查'
         }
       },
       examples: {
@@ -182,7 +209,14 @@ if (NODE_ENV === 'development') {
         getRoutesByWaypointsAny: `${API_PREFIX}/routes/waypoints/any?ids=1,2,3`,
         getPopularRoutes: `${API_PREFIX}/routes/popular?limit=5`,
         getRouteWaypoints: `${API_PREFIX}/routes/1/waypoints`,
-        getRouteById: `${API_PREFIX}/routes/1`
+        getRouteById: `${API_PREFIX}/routes/1`,
+        
+        // 用户分析示例
+        recordTrajectoryPlayback: `${API_PREFIX}/analytics-simple/trajectory-playback`,
+        getBehaviorStats: `${API_PREFIX}/analytics-simple/statistics/behavior?start_date=2024-01-01`,
+        getPopularRouteStats: `${API_PREFIX}/analytics-simple/statistics/popular-routes`,
+        getNavigationPreferences: `${API_PREFIX}/analytics-simple/statistics/navigation-preferences`,
+        getAnalyticsReport: `${API_PREFIX}/analytics-simple/report?start_date=2024-01-01&end_date=2024-12-31`
       }
     });
   });
@@ -201,6 +235,9 @@ const startServer = async () => {
   try {
     // 测试数据库连接
     await testConnection();
+    
+    // 启动数据清理任务
+    startDataCleanupTask();
     
     // 启动服务器
     app.listen(PORT, () => {

@@ -121,9 +121,15 @@
     <SmartRouteDetailModal
       v-if="showRouteDetail"
       :route="selectedRouteForDetail"
+      :smartParams="smartParams"
+      :difficultyText="difficultyText"
+      :weatherScore="getCurrentWeatherScore()"
+      :matchedRoutesCount="matchResults.length"
       @close="closeRouteDetail"
       @route-selected="handleRouteSelected"
       @trajectory-playback="handleTrajectoryPlayback"
+      @route-navigate-with-markers="handleRouteNavigateWithMarkers"
+      @clear-previous-displays="handleClearPreviousDisplays"
     />
   </div>
 </template>
@@ -133,9 +139,10 @@ import { ref, reactive, computed, inject } from 'vue'
 import { useRoutePlanning } from '@/composables/useRoutePlanning.js'
 import { getWeatherScore } from '@/utils/weatherUtils.js'
 import SmartRouteDetailModal from './SmartRouteDetailModal.vue'
+import simplifiedAnalytics from '@/utils/simplifiedAnalytics'
 
 // 发射事件到父组件
-const emit = defineEmits(['route-generated', 'route-selected', 'trajectory-playback'])
+const emit = defineEmits(['route-generated', 'route-selected', 'trajectory-playback', 'route-navigate-with-markers', 'clear-previous-displays'])
 
 // 使用路线规划组合式函数
 const {
@@ -259,6 +266,8 @@ const handleSmartMatch = async () => {
     
     matchResults.value = results || []
     
+    // 智能匹配完成，将结果保存到组件状态中，记录将在用户选择路线时进行
+    
     // 发射匹配完成事件
     emit('route-generated', {
       mode: 'smart',
@@ -294,6 +303,16 @@ const handleRouteSelected = (routeData) => {
 // 处理轨迹回放（从弹窗中触发）
 const handleTrajectoryPlayback = (trajectoryData) => {
   emit('trajectory-playback', trajectoryData)
+}
+
+// 处理导航路线标记事件（从弹窗中触发）
+const handleRouteNavigateWithMarkers = (routeData) => {
+  emit('route-navigate-with-markers', routeData)
+}
+
+// 处理清除之前显示的事件（从弹窗中触发）
+const handleClearPreviousDisplays = () => {
+  emit('clear-previous-displays')
 }
 
 // 暴露给父组件的方法

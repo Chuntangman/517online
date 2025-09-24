@@ -206,7 +206,10 @@ const startCameraTracking = async () => {
       skyColor: '#87CEEB',  // 设置天空颜色，增强对比度
       // 添加更多优化选项
       showIndoorMap: false,  // 关闭室内地图
-      defaultCursor: 'default'
+      defaultCursor: 'default',
+      // 优化瓦片加载策略（使用AMap支持的配置项）
+      preloadMode: true,  // 启用预加载模式
+      expandZoomRange: true  // 扩展缩放范围的瓦片加载
     }
     
     console.log('新地图配置:', newMapConfig)
@@ -218,7 +221,7 @@ const startCameraTracking = async () => {
     await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('地图加载超时'))
-      }, 10000)
+      }, 15000) // 增加超时时间以支持瓦片预加载
       
       new3DMap.on('complete', () => {
         clearTimeout(timeout)
@@ -226,6 +229,37 @@ const startCameraTracking = async () => {
         resolve()
       })
     })
+    
+    // 显示预加载进度提示
+    const originalTitle = document.querySelector('.demo-title h1')
+    const originalText = originalTitle ? originalTitle.textContent : ''
+    
+    if (originalTitle) {
+      originalTitle.textContent = `🔄 正在预加载地图瓦片... (0%)`
+    }
+    
+    // 实现轨迹路径瓦片预加载机制
+    await preloadTrajectoryTiles(new3DMap, (progress) => {
+      // 更新进度显示
+      if (originalTitle) {
+        originalTitle.textContent = `🔄 正在预加载地图瓦片... (${progress}%)`
+      }
+    })
+    
+    // 显示预加载完成提示
+    if (originalTitle) {
+      originalTitle.textContent = `✅ 瓦片预加载完成，准备开始轨迹回放...`
+    }
+    
+    // 短暂等待，让用户看到完成提示
+    await new Promise(resolve => setTimeout(resolve, 1500))
+    
+    // 恢复原始标题
+    if (originalTitle) {
+      originalTitle.textContent = originalText
+    }
+    
+    console.log('🎬 瓦片预加载完成，开始初始化轨迹回放组件...')
     
     // 更新地图实例引用
     const originalMapInstance = props.mapInstance
@@ -249,131 +283,15 @@ const startCameraTracking = async () => {
     // 绘制轨迹线（按照官方示例），绑定到新的3D地图
     drawTrajectoryPath(new3DMap)
 
-    // 按照官方示例启动动画循环
-    window.movingDraw = true
-    window.trajectoryAnimationFinished = false
+    console.log('🎯 所有组件初始化完成，等待瓦片完全就绪后开始动画...')
     
-    // 用于限制日志频率的计数器
-    let debugCounter = 0
+    // 等待瓦片完全就绪
+    await waitForTilesReady(new3DMap)
     
-    const run = () => {
-      if (!window.trajectoryAnimationFinished && trajectoryPolyline.value && isTracking.value) {
-        const center = props.mapInstance.getCenter().toArray()
-        const lastPath = trajectoryPolyline.value.getPath()
-        
-        // 每10次循环输出一次调试信息，避免控制台被淹没
-        if (debugCounter % 10 === 0) {
-          console.log('=== run() 动画循环调试 (第', debugCounter, '次) ===')
-          console.log('地图中心点:', center)
-          console.log('当前轨迹线路径长度:', lastPath.length)
-          console.log('当前轨迹线路径:', lastPath.slice(0, 3), '...(显示前3个点)')
-        }
-        
-        // 智能处理新的路径点：根据轨迹数据格式决定是否添加高度
-        let centerWith3D = center
-        if (center.length >= 2) {
-          // 检查原始轨迹数据是否包含高度信息
-          const hasOriginal3D = currentTrajectoryPath.value.some(point => 
-            Array.isArray(point) && point.length >= 3
-          )
-          
-          if (hasOriginal3D) {
-            // 原始数据包含3D信息，为新点添加适当高度
-            centerWith3D = [center[0], center[1], 50] // 使用较低高度以贴近地面
-          } else {
-            // 原始数据是2D，保持2D格式让地图自动处理高度
-            centerWith3D = [center[0], center[1]]
-          }
-        }
-        
-        if (debugCounter % 10 === 0) {
-          console.log('处理后的中心点:', centerWith3D)
-        }
-        
-        lastPath.push(centerWith3D)
-        if (lastPath.length === 1) {
-          lastPath.push(centerWith3D)
-        }
-        
-        trajectoryPolyline.value.setPath(lastPath)
-        
-        // 验证路径是否设置成功
-        const verifyPath = trajectoryPolyline.value.getPath()
-        if (debugCounter % 10 === 0) {
-          console.log('更新后轨迹线路径长度:', lastPath.length)
-          console.log('验证：轨迹线路径设置后长度:', verifyPath.length)
-        }
-        
-        if (marker.value) {
-          // 智能处理标记位置更新
-          const markerCenter = center.length >= 2 
-            ? (currentTrajectoryPath.value.some(point => Array.isArray(point) && point.length >= 3)
-                ? [center[0], center[1], 50] // 3D数据使用适当高度
-                : [center[0], center[1]])    // 2D数据保持2D格式
-            : center
-          marker.value.setPosition(markerCenter)
-          
-          if (debugCounter % 10 === 0) {
-            console.log('标记位置已更新:', markerCenter)
-          }
-        }
-        
-        if (debugCounter % 10 === 0) {
-          console.log('=== run() 循环结束 ===')
-        }
-        
-        debugCounter++
-      }
-      
-      if (!window.trajectoryAnimationFinished && isTracking.value) {
-        requestAnimationFrame(run)
-      }
-    }
+    console.log('🚀 瓦片完全就绪，正式开始轨迹回放动画！')
     
-    // 启动Loca动画（按照官方示例）
-    locaInstance.value.animate.start()
-    
-    console.log('轨迹线已正确绑定到新3D地图')
-    
-    // 在Loca动画启动后再开始run循环（确保正确的时序）
-    setTimeout(() => {
-      run()
-      console.log('run循环已启动')
-    }, 100)
-    
-    // 验证轨迹线是否在地图上可见，并尝试备用方案
-    setTimeout(() => {
-      if (trajectoryPolyline.value) {
-        console.log('=== 轨迹线可见性检查 ===')
-        console.log('轨迹线实例:', trajectoryPolyline.value)
-        console.log('轨迹线当前路径:', trajectoryPolyline.value.getPath())
-        console.log('轨迹线是否可见:', trajectoryPolyline.value.getVisible ? trajectoryPolyline.value.getVisible() : '未知')
-        console.log('轨迹线zIndex:', trajectoryPolyline.value.getzIndex ? trajectoryPolyline.value.getzIndex() : '未知')
-        
-        // 如果轨迹线路径为空或只有一个点，尝试强制设置初始路径
-        const currentPath = trajectoryPolyline.value.getPath()
-        if (!currentPath || currentPath.length <= 1) {
-          console.warn('轨迹线路径异常，尝试强制设置初始路径')
-          const startPoint = currentTrajectoryPath.value[0]
-          if (startPoint) {
-            const forcePath = Array.isArray(startPoint) && startPoint.length === 2
-              ? [[startPoint[0], startPoint[1]], [startPoint[0], startPoint[1]]]
-              : [startPoint, startPoint]
-            trajectoryPolyline.value.setPath(forcePath)
-            console.log('已强制设置轨迹线初始路径:', forcePath)
-          }
-        }
-        
-        // 尝试强制显示轨迹线
-        if (trajectoryPolyline.value.show) {
-          trajectoryPolyline.value.show()
-          console.log('已调用轨迹线show()方法')
-        }
-      }
-    }, 2000)
-
-    // 开始镜头追踪动画
-    startViewControlTracking()
+    // 现在开始动画 - 在瓦片预加载完成后
+    await startTrajectoryAnimation(new3DMap)
 
     isTracking.value = true
     emit('playback-started')
@@ -382,6 +300,389 @@ const startCameraTracking = async () => {
     console.error('开始镜头追踪失败:', error)
     errorMessage.value = `开始镜头追踪失败: ${error.message}`
   }
+}
+
+// 基于途径点的一次性瓦片预加载机制
+const preloadTrajectoryTiles = async (mapInstance, progressCallback = null) => {
+  console.log('🚀 开始基于途径点的一次性瓦片预加载...')
+  
+  if (!currentTrajectoryPath.value || currentTrajectoryPath.value.length === 0) {
+    console.warn('没有轨迹路径数据，跳过瓦片预加载')
+    return
+  }
+  
+  try {
+    const totalPoints = currentTrajectoryPath.value.length
+    console.log(`📍 轨迹总共包含 ${totalPoints} 个途径点`)
+    
+    // 第一阶段：预加载整体边界区域
+    console.log('📦 第一阶段：预加载整体轨迹边界区域')
+    const bounds = calculateTrajectoryBounds(currentTrajectoryPath.value)
+    console.log('轨迹边界范围:', bounds)
+    
+    const boundingBox = new AMap.Bounds(
+      [bounds.minLng, bounds.minLat],
+      [bounds.maxLng, bounds.maxLat]
+    )
+    
+    // 设置地图边界以预加载整体区域瓦片
+    mapInstance.setBounds(boundingBox, false, [50, 50, 50, 50])
+    
+    // 阶段1进度更新
+    if (progressCallback) progressCallback(10)
+    
+    await new Promise(resolve => setTimeout(resolve, 3000)) // 给整体区域更多加载时间
+    console.log('✅ 整体边界区域瓦片预加载完成')
+    
+    if (progressCallback) progressCallback(20)
+    
+    // 第二阶段：逐个预加载所有途径点
+    console.log('🎯 第二阶段：逐个预加载所有途径点区域')
+    
+    // 根据轨迹长度调整预加载策略
+    let pointsToPreload = []
+    if (totalPoints <= 20) {
+      // 短轨迹：加载所有点
+      pointsToPreload = currentTrajectoryPath.value.map((point, index) => ({
+        point: Array.isArray(point) ? [point[0], point[1]] : [point.longitude || point.lng, point.latitude || point.lat],
+        index: index
+      }))
+      console.log(`📌 短轨迹策略：预加载全部 ${totalPoints} 个途径点`)
+    } else if (totalPoints <= 50) {
+      // 中等轨迹：每2个点取1个
+      pointsToPreload = currentTrajectoryPath.value.filter((_, index) => index % 2 === 0).map((point, index) => ({
+        point: Array.isArray(point) ? [point[0], point[1]] : [point.longitude || point.lng, point.latitude || point.lat],
+        index: index * 2
+      }))
+      console.log(`📌 中等轨迹策略：每2个点取1个，共预加载 ${pointsToPreload.length} 个途径点`)
+    } else {
+      // 长轨迹：每5个点取1个，但确保包含起点、终点和关键转折点
+      const step = Math.max(3, Math.floor(totalPoints / 25)) // 最多25个预加载点
+      pointsToPreload = []
+      
+      // 添加起点
+      pointsToPreload.push({
+        point: Array.isArray(currentTrajectoryPath.value[0]) ? 
+          [currentTrajectoryPath.value[0][0], currentTrajectoryPath.value[0][1]] : 
+          [currentTrajectoryPath.value[0].longitude || currentTrajectoryPath.value[0].lng, currentTrajectoryPath.value[0].latitude || currentTrajectoryPath.value[0].lat],
+        index: 0
+      })
+      
+      // 添加间隔点
+      for (let i = step; i < totalPoints - step; i += step) {
+        const point = currentTrajectoryPath.value[i]
+        pointsToPreload.push({
+          point: Array.isArray(point) ? [point[0], point[1]] : [point.longitude || point.lng, point.latitude || point.lat],
+          index: i
+        })
+      }
+      
+      // 添加终点
+      const lastPoint = currentTrajectoryPath.value[totalPoints - 1]
+      pointsToPreload.push({
+        point: Array.isArray(lastPoint) ? [lastPoint[0], lastPoint[1]] : [lastPoint.longitude || lastPoint.lng, lastPoint.latitude || lastPoint.lat],
+        index: totalPoints - 1
+      })
+      
+      console.log(`📌 长轨迹策略：每${step}个点取1个，共预加载 ${pointsToPreload.length} 个关键途径点`)
+    }
+    
+    // 逐个预加载每个途径点周围的瓦片
+    for (let i = 0; i < pointsToPreload.length; i++) {
+      const { point, index } = pointsToPreload[i]
+      const pointProgress = Math.round((i + 1) / pointsToPreload.length * 80) // 剩余80%进度分配给点加载
+      const totalProgress = 20 + pointProgress // 加上前面20%的基础进度
+      
+      console.log(`🔄 预加载途径点 ${index + 1}/${totalPoints} (${totalProgress}%):`, point)
+      
+      // 更新进度
+      if (progressCallback) progressCallback(totalProgress)
+      
+      // 设置地图中心到当前途径点，触发周围瓦片加载
+      mapInstance.setZoomAndCenter(13.5, point, false)
+      
+      // 为每个点预加载周围更大范围的瓦片
+      const surroundingPoints = generateSurroundingPoints(point, 0.008) // 约800米半径
+      for (const surroundPoint of surroundingPoints) {
+        mapInstance.setCenter(surroundPoint, false)
+        await new Promise(resolve => setTimeout(resolve, 100)) // 每个周围点100ms
+      }
+      
+      // 主点加载时间
+      await new Promise(resolve => setTimeout(resolve, 200))
+    }
+    
+    // 恢复到起点
+    mapInstance.setZoomAndCenter(13.5, currentTrajectoryPath.value[0], false)
+    
+    console.log('🎉 基于途径点的一次性瓦片预加载完成！')
+    console.log(`📊 预加载统计：轨迹总点数 ${totalPoints}，实际预加载点数 ${pointsToPreload.length}`)
+    
+    // 最终进度完成
+    if (progressCallback) progressCallback(100)
+    
+  } catch (error) {
+    console.error('❌ 瓦片预加载过程中出错:', error)
+  }
+}
+
+// 计算轨迹边界
+const calculateTrajectoryBounds = (trajectory) => {
+  let minLng = Infinity, maxLng = -Infinity
+  let minLat = Infinity, maxLat = -Infinity
+  
+  trajectory.forEach(point => {
+    const lng = Array.isArray(point) ? point[0] : point.longitude || point.lng
+    const lat = Array.isArray(point) ? point[1] : point.latitude || point.lat
+    
+    if (lng < minLng) minLng = lng
+    if (lng > maxLng) maxLng = lng
+    if (lat < minLat) minLat = lat
+    if (lat > maxLat) maxLat = lat
+  })
+  
+  // 添加更大的边界缓冲区，确保完整覆盖轨迹周围区域
+  const lngRange = maxLng - minLng
+  const latRange = maxLat - minLat
+  
+  // 动态缓冲区：轨迹越长，缓冲区相对越小；轨迹越短，缓冲区相对越大
+  const baseLngBuffer = Math.max(lngRange * 0.15, 0.005) // 至少500米缓冲
+  const baseLatBuffer = Math.max(latRange * 0.15, 0.005) // 至少500米缓冲
+  
+  return {
+    minLng: minLng - baseLngBuffer,
+    maxLng: maxLng + baseLngBuffer,
+    minLat: minLat - baseLatBuffer,
+    maxLat: maxLat + baseLatBuffer
+  }
+}
+
+// 获取轨迹关键点（用于预加载）
+const getKeyTrajectoryPoints = (trajectory, count) => {
+  if (trajectory.length <= count) {
+    return trajectory.map(point => 
+      Array.isArray(point) ? [point[0], point[1]] : [point.longitude || point.lng, point.latitude || point.lat]
+    )
+  }
+  
+  const keyPoints = []
+  const step = Math.floor(trajectory.length / count)
+  
+  for (let i = 0; i < count; i++) {
+    const index = i * step
+    const point = trajectory[index]
+    keyPoints.push(
+      Array.isArray(point) ? [point[0], point[1]] : [point.longitude || point.lng, point.latitude || point.lat]
+    )
+  }
+  
+  // 确保包含终点
+  const lastPoint = trajectory[trajectory.length - 1]
+  keyPoints.push(
+    Array.isArray(lastPoint) ? [lastPoint[0], lastPoint[1]] : [lastPoint.longitude || lastPoint.lng, lastPoint.latitude || lastPoint.lat]
+  )
+  
+  return keyPoints
+}
+
+// 生成点周围的瓦片预加载点（用于更全面的瓦片覆盖）
+const generateSurroundingPoints = (centerPoint, radius) => {
+  const [centerLng, centerLat] = centerPoint
+  const surroundingPoints = []
+  
+  // 生成8个方向的点（东、西、南、北、东南、东北、西南、西北）
+  const directions = [
+    [1, 0],    // 东
+    [-1, 0],   // 西
+    [0, 1],    // 北
+    [0, -1],   // 南
+    [1, 1],    // 东北
+    [1, -1],   // 东南
+    [-1, 1],   // 西北
+    [-1, -1]   // 西南
+  ]
+  
+  directions.forEach(([lngOffset, latOffset]) => {
+    surroundingPoints.push([
+      centerLng + lngOffset * radius,
+      centerLat + latOffset * radius
+    ])
+  })
+  
+  return surroundingPoints
+}
+
+// 等待瓦片完全就绪
+const waitForTilesReady = async (mapInstance) => {
+  console.log('⏳ 等待瓦片完全就绪...')
+  
+  return new Promise((resolve) => {
+    let checkCount = 0
+    const maxChecks = 20 // 最多检查20次，避免无限等待
+    
+    const checkTileStatus = () => {
+      checkCount++
+      console.log(`🔍 第${checkCount}次检查瓦片状态...`)
+      
+      // 检查地图是否完全加载
+      if (mapInstance && typeof mapInstance.getStatus === 'function') {
+        const status = mapInstance.getStatus()
+        console.log('地图状态:', status)
+        
+        if (status && status.loaded) {
+          console.log('✅ 地图瓦片完全就绪！')
+          resolve()
+          return
+        }
+      }
+      
+      // 如果达到最大检查次数，强制继续
+      if (checkCount >= maxChecks) {
+        console.log('⚠️ 达到最大等待次数，强制继续...')
+        resolve()
+        return
+      }
+      
+      // 继续等待
+      setTimeout(checkTileStatus, 500)
+    }
+    
+    // 开始检查
+    setTimeout(checkTileStatus, 1000)
+  })
+}
+
+// 开始轨迹动画（在瓦片预加载完成后）
+const startTrajectoryAnimation = async (mapInstance) => {
+  console.log('🎬 开始初始化轨迹动画...')
+  
+  // 按照官方示例启动动画循环
+  window.movingDraw = true
+  window.trajectoryAnimationFinished = false
+  
+  // 用于限制日志频率的计数器
+  let debugCounter = 0
+  
+  const run = () => {
+    if (!window.trajectoryAnimationFinished && trajectoryPolyline.value && isTracking.value) {
+      const center = props.mapInstance.getCenter().toArray()
+      const lastPath = trajectoryPolyline.value.getPath()
+      
+      // 每10次循环输出一次调试信息，避免控制台被淹没
+      if (debugCounter % 10 === 0) {
+        console.log('=== run() 动画循环调试 (第', debugCounter, '次) ===')
+        console.log('地图中心点:', center)
+        console.log('当前轨迹线路径长度:', lastPath.length)
+        console.log('当前轨迹线路径:', lastPath.slice(0, 3), '...(显示前3个点)')
+      }
+      
+      // 智能处理新的路径点：根据轨迹数据格式决定是否添加高度
+      let centerWith3D = center
+      if (center.length >= 2) {
+        // 检查原始轨迹数据是否包含高度信息
+        const hasOriginal3D = currentTrajectoryPath.value.some(point => 
+          Array.isArray(point) && point.length >= 3
+        )
+        
+        if (hasOriginal3D) {
+          // 原始数据包含3D信息，为新点添加适当高度
+          centerWith3D = [center[0], center[1], 50] // 使用较低高度以贴近地面
+        } else {
+          // 原始数据是2D，保持2D格式让地图自动处理高度
+          centerWith3D = [center[0], center[1]]
+        }
+      }
+      
+      if (debugCounter % 10 === 0) {
+        console.log('处理后的中心点:', centerWith3D)
+      }
+      
+      lastPath.push(centerWith3D)
+      if (lastPath.length === 1) {
+        lastPath.push(centerWith3D)
+      }
+      
+      trajectoryPolyline.value.setPath(lastPath)
+      
+      // 验证路径是否设置成功
+      const verifyPath = trajectoryPolyline.value.getPath()
+      if (debugCounter % 10 === 0) {
+        console.log('更新后轨迹线路径长度:', lastPath.length)
+        console.log('验证：轨迹线路径设置后长度:', verifyPath.length)
+      }
+      
+      if (marker.value) {
+        // 智能处理标记位置更新
+        const markerCenter = center.length >= 2 
+          ? (currentTrajectoryPath.value.some(point => Array.isArray(point) && point.length >= 3)
+              ? [center[0], center[1], 50] // 3D数据使用适当高度
+              : [center[0], center[1]])    // 2D数据保持2D格式
+          : center
+        marker.value.setPosition(markerCenter)
+        
+        if (debugCounter % 10 === 0) {
+          console.log('标记位置已更新:', markerCenter)
+        }
+      }
+      
+      if (debugCounter % 10 === 0) {
+        console.log('=== run() 循环结束 ===')
+      }
+      
+      debugCounter++
+    }
+    
+    if (!window.trajectoryAnimationFinished && isTracking.value) {
+      requestAnimationFrame(run)
+    }
+  }
+  
+  // 启动Loca动画（按照官方示例）
+  locaInstance.value.animate.start()
+  
+  console.log('轨迹线已正确绑定到新3D地图')
+  
+  // 在Loca动画启动后再开始run循环（确保正确的时序）
+  setTimeout(() => {
+    run()
+    console.log('run循环已启动')
+  }, 100)
+  
+  // 验证轨迹线是否在地图上可见，并尝试备用方案
+  setTimeout(() => {
+    if (trajectoryPolyline.value) {
+      console.log('=== 轨迹线可见性检查 ===')
+      console.log('轨迹线实例:', trajectoryPolyline.value)
+      console.log('轨迹线当前路径:', trajectoryPolyline.value.getPath())
+      console.log('轨迹线是否可见:', trajectoryPolyline.value.getVisible ? trajectoryPolyline.value.getVisible() : '未知')
+      console.log('轨迹线zIndex:', trajectoryPolyline.value.getzIndex ? trajectoryPolyline.value.getzIndex() : '未知')
+      
+      // 如果轨迹线路径为空或只有一个点，尝试强制设置初始路径
+      const currentPath = trajectoryPolyline.value.getPath()
+      if (!currentPath || currentPath.length <= 1) {
+        console.warn('轨迹线路径异常，尝试强制设置初始路径')
+        const startPoint = currentTrajectoryPath.value[0]
+        if (startPoint) {
+          const forcePath = Array.isArray(startPoint) && startPoint.length === 2
+            ? [[startPoint[0], startPoint[1]], [startPoint[0], startPoint[1]]]
+            : [startPoint, startPoint]
+          trajectoryPolyline.value.setPath(forcePath)
+          console.log('已强制设置轨迹线初始路径:', forcePath)
+        }
+      }
+      
+      // 尝试强制显示轨迹线
+      if (trajectoryPolyline.value.show) {
+        trajectoryPolyline.value.show()
+        console.log('已调用轨迹线show()方法')
+      }
+    }
+  }, 2000)
+
+  // 开始镜头追踪动画
+  startViewControlTracking()
+  
+  console.log('🎉 轨迹回放动画已全面启动！')
 }
 
 // 停止镜头追踪
@@ -399,21 +700,21 @@ const stopCameraTracking = () => {
       locaInstance.value.viewControl.stop()
   } catch (error) {
       console.warn('停止视角控制失败:', error)
-    }
   }
+}
 
   // 清除标记
   if (marker.value) {
     marker.value.setMap(null)
     marker.value = null
   }
-
+  
   // 清除轨迹线
   if (trajectoryPolyline.value) {
     trajectoryPolyline.value.setMap(null)
     trajectoryPolyline.value = null
   }
-
+  
   // 需要重新初始化原始地图以恢复正常功能
   // 由于我们重新创建了3D地图，停止时需要通知父组件重新初始化地图
   console.log('镜头追踪停止，需要重新初始化地图')
@@ -1000,7 +1301,7 @@ defineExpose({
   .start-btn {
     padding: 10px 16px;
     height: 44px;
-    font-size: 14px;
+  font-size: 14px;
     min-width: 120px;
   }
 

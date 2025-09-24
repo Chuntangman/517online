@@ -331,6 +331,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useElevation } from '@/composables/useElevation'
+import simplifiedAnalytics from '@/utils/simplifiedAnalytics'
 
 // 定义 props 和 emits
 const props = defineProps({
@@ -612,6 +613,26 @@ const handleRouteSuccess = async (result) => {
   
   hasActiveRoute.value = true
   isStepsCollapsed.value = false
+
+  // 记录导航路线规划行为
+  try {
+    await simplifiedAnalytics.trackRouteNavigation({
+      start_point: searchMode.value === 'coordinates' 
+        ? `${startCoordinates.value.lng},${startCoordinates.value.lat}`
+        : `${startKeyword.value},${startCity.value}`,
+      end_point: searchMode.value === 'coordinates'
+        ? `${endCoordinates.value.lng},${endCoordinates.value.lat}`
+        : `${endKeyword.value},${endCity.value}`,
+      waypoints: waypointsData.value,
+      route_policy: routePolicy.value,
+      search_mode: searchMode.value,
+      distance: formatDistance(route.distance),
+      duration: formatTime(route.time),
+      smart_sampling_enabled: enableSmartSampling.value
+    })
+  } catch (error) {
+    console.warn('记录导航行为失败:', error)
+  }
 
   // 发送事件（包含高程数据）
   emit('route-planned', {
