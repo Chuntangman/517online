@@ -30,6 +30,17 @@ export default defineConfig({
             console.log('Elevation API proxy error:', err)
           })
         }
+      },
+      // 新增：高德地图高程API代理（中国境内可访问）
+      '/amap-elevation': {
+        target: 'https://restapi.amap.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/amap-elevation/, '/v3/assistant/coordinate/convert'),
+        configure: (proxy, options) => {
+          proxy.on('error', (err, req, res) => {
+            console.log('AMap Elevation API proxy error:', err)
+          })
+        }
       }
     }
   }

@@ -3,8 +3,8 @@ import axios from 'axios'
 import { gcj02ToWgs84, batchGcj02ToWgs84 } from '@/utils/coordinateTransform'
 
 /**
- * 高程数据获取服务
- * 使用Open-Elevation API获取指定坐标的海拔高度
+ * 高程数据获取服务 - 优化版
+ * 支持多种高程API，自动选择最快的服务
  * 自动处理 GCJ-02 到 WGS-84 坐标系转换
  */
 export function useElevation() {
@@ -12,154 +12,201 @@ export function useElevation() {
   const error = ref(null)
   const elevationData = ref([])
 
-  // 高程API端点 - 开发环境使用Vite代理，生产环境使用后端API
-  const isDevelopment = import.meta.env.DEV
-  const ELEVATION_API_URL = isDevelopment 
-    ? '/elevation-api/api/v1/lookup'  // 开发环境：Vite代理
-    : '/api/v1/elevation/lookup'      // 生产环境：后端API
+  // 单一API配置 - 使用后端批量API（最稳定）
+  const ELEVATION_API = {
+    batch: '/api/v1/elevation/batch',
+    single: '/api/v1/elevation/lookup',
+    timeout: 25000 // 增加超时时间到25秒
+  }
+
+  // 请求去重机制 - 防止重复获取
+  const requestCache = new Map()
+  const CACHE_DURATION = 5 * 60 * 1000 // 5分钟缓存
+
+  // 高程获取服务已启动
 
   /**
-   * 获取单个坐标点的高程数据
-   * @param {number} latitude - 纬度（GCJ-02坐标系，自动转换为WGS-84）
-   * @param {number} longitude - 经度（GCJ-02坐标系，自动转换为WGS-84）
-   * @returns {Promise<number|null>} 高程值（米）
+   * 生成请求缓存键
+   * @param {Array} coordinates - 坐标数组
+   * @returns {string} 缓存键
    */
-  const getElevationForPoint = async (latitude, longitude) => {
+  const generateCacheKey = (coordinates) => {
+    const sortedCoords = coordinates.map(c => `${c.lng.toFixed(6)},${c.lat.toFixed(6)}`).sort()
+    return `elevation_${sortedCoords.join('_')}`
+  }
+
+  /**
+   * 检查缓存
+   * @param {string} cacheKey - 缓存键
+   * @returns {Object|null} 缓存的数据或null
+   */
+  const getFromCache = (cacheKey) => {
+    const cached = requestCache.get(cacheKey)
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      console.log(`💾 [优化] 使用缓存数据，键: ${cacheKey}`)
+      return cached.data
+    }
+    if (cached) {
+      requestCache.delete(cacheKey) // 清除过期缓存
+    }
+    return null
+  }
+
+  /**
+   * 设置缓存
+   * @param {string} cacheKey - 缓存键
+   * @param {*} data - 要缓存的数据
+   */
+  const setToCache = (cacheKey, data) => {
+    requestCache.set(cacheKey, {
+      data,
+      timestamp: Date.now()
+    })
+    console.log(`💾 [优化] 数据已缓存，键: ${cacheKey}`)
+  }
+
+  /**
+   * 优化的批量高程数据获取 - 支持缓存、去重和重试
+   * @param {Array} coordinates - 坐标数组 [{lng, lat}, ...]（GCJ-02坐标系）
+   * @param {number} retryCount - 重试次数（默认0）
+   * @returns {Promise<Array>} 高程数据数组
+   */
+  const getBatchElevationOptimized = async (coordinates, retryCount = 0) => {
+    if (!coordinates || coordinates.length === 0) {
+      return []
+    }
+
+    // 检查缓存
+    const cacheKey = generateCacheKey(coordinates)
+    const cachedData = getFromCache(cacheKey)
+    if (cachedData) {
+      return cachedData
+    }
+
+    // 坐标系转换：批量转换 GCJ-02 → WGS-84
+    const wgs84Coordinates = batchGcj02ToWgs84(coordinates)
+    
     try {
-      console.log(`获取坐标 [${longitude}, ${latitude}] 的高程数据（GCJ-02）`)
+      const startTime = Date.now()
+      console.log(`🌐 [API] 请求高程数据: ${coordinates.length} 个坐标点 ${retryCount > 0 ? `(重试 ${retryCount})` : ''}`)
       
-      // 坐标系转换：GCJ-02 → WGS-84
-      const wgs84Coord = gcj02ToWgs84(longitude, latitude)
-      const wgs84Lng = wgs84Coord.lng
-      const wgs84Lat = wgs84Coord.lat
-      
-      console.log(`转换后WGS-84坐标: [${wgs84Lng}, ${wgs84Lat}]`)
-      
-      const response = await axios.get(ELEVATION_API_URL, {
-        params: {
-          locations: `${wgs84Lat},${wgs84Lng}`
-        },
-        timeout: 5000, // 减少超时时间到5秒
+      // 使用后端批量API
+      const response = await axios.post(ELEVATION_API.batch, {
+        coordinates: wgs84Coordinates
+      }, {
+        timeout: ELEVATION_API.timeout,
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         }
       })
 
-      // 处理不同环境的响应格式
-      let elevationData
-      if (isDevelopment) {
-        // 开发环境：直接使用Open-Elevation API响应
-        elevationData = response.data
-      } else {
-        // 生产环境：使用后端API包装的响应
-        if (response.data?.success && response.data?.data) {
-          elevationData = response.data.data
-        } else {
-          console.warn('后端API响应格式错误:', response.data)
-          return null
-        }
-      }
+      const endTime = Date.now()
+      console.log(`⏱️ [API] 请求耗时: ${endTime - startTime}ms`)
 
-      if (elevationData && elevationData.results && elevationData.results.length > 0) {
-        const elevation = elevationData.results[0].elevation
-        console.log(`高程数据: ${elevation}米`)
-        return Math.round(elevation)
+      // 解析响应
+      if (response.data?.success && response.data?.data) {
+        const elevations = response.data.data.map((item, index) => {
+          // 🚫 修复：避免用0替代null，保持数据真实性
+          if (item.elevation === null || item.elevation === undefined) {
+            console.warn(`⚠️ 坐标 [${coordinates[index]?.lng}, ${coordinates[index]?.lat}] 高程数据为空`)
+            return null
+          }
+          return Math.round(item.elevation)
+        })
+        
+        const validCount = elevations.filter(e => e !== null).length
+        console.log(`✅ [API] 成功获取 ${validCount}/${elevations.length} 个有效高程数据`)
+        
+        // 缓存结果
+        setToCache(cacheKey, elevations)
+        return elevations
       }
       
-      console.warn('未获取到有效的高程数据')
+      console.error(`❌ [API] 响应格式错误:`, response.data)
+      throw new Error(`批量API响应格式错误: ${JSON.stringify(response.data)}`)
+    } catch (err) {
+      console.error(`❌ [API] 请求失败 (尝试 ${retryCount + 1}):`, err.message)
+      
+      // 重试机制：最多重试2次
+      if (retryCount < 2) {
+        const delay = (retryCount + 1) * 2000 // 递增延迟：2秒、4秒
+        console.log(`🔄 [API] ${delay/1000}秒后重试...`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        return getBatchElevationOptimized(coordinates, retryCount + 1)
+      }
+      
+      console.error(`💥 [API] 重试次数耗尽，高程数据获取失败`)
+      throw err
+    }
+  }
+
+
+  /**
+   * 优化的单点高程数据获取 - 支持缓存
+   * @param {number} latitude - 纬度（GCJ-02坐标系，自动转换为WGS-84）
+   * @param {number} longitude - 经度（GCJ-02坐标系，自动转换为WGS-84）
+   * @returns {Promise<number|null>} 高程值（米）
+   */
+  const getElevationForPoint = async (latitude, longitude) => {
+    console.log(`🔍 [优化] 单点查询: [${longitude}, ${latitude}]`)
+    
+    try {
+      // 坐标系转换：GCJ-02 → WGS-84
+      const wgs84Coord = gcj02ToWgs84(longitude, latitude)
+      const wgs84Lng = wgs84Coord.lng
+      const wgs84Lat = wgs84Coord.lat
+      
+      console.log(`🔄 [优化] 坐标转换: [${longitude}, ${latitude}] → [${wgs84Lng}, ${wgs84Lat}]`)
+      
+      const startTime = Date.now()
+      const response = await axios.get(ELEVATION_API.single, {
+        params: {
+          locations: `${wgs84Lat},${wgs84Lng}`
+        },
+        timeout: ELEVATION_API.timeout,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      })
+      
+      const endTime = Date.now()
+      console.log(`⏱️ [优化] 单点API请求耗时: ${endTime - startTime}ms`)
+
+      if (response.data?.success && response.data?.data) {
+        const elevationData = response.data.data
+        if (elevationData && elevationData.results && elevationData.results.length > 0) {
+          const elevation = Math.round(elevationData.results[0].elevation)
+          console.log(`✅ [优化] 单点查询成功: [${longitude}, ${latitude}] = ${elevation}m`)
+          return elevation
+        }
+      }
+      
+      console.warn(`⚠️ [优化] 单点查询无有效数据:`, response.data)
       return null
     } catch (err) {
-      // 静默处理超时错误，不影响用户体验
-      if (err.message.includes('timeout') || err.code === 'ECONNABORTED') {
-        // 超时错误不输出到控制台，静默返回null
-        return null
-      }
-      
-      // 其他错误仍需要显示
-      console.error('获取高程数据失败:', err.message)
-      if (err.response?.status === 429) {
-        console.warn('API请求频率过高，请稍后再试')
-      } else if (err.code === 'ERR_NETWORK') {
-        console.warn('网络连接问题或CORS限制')
-      }
+      console.error(`💥 [优化] 单点查询失败: [${longitude}, ${latitude}]`, {
+        message: err.message,
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        data: err.response?.data
+      })
       return null
     }
   }
 
-  /**
-   * 单点查询高程数据（开发环境或批量API失败时使用）
-   * @param {Array} sampledCoordinates - 采样后的坐标数组（GCJ-02坐标系）
-   * @returns {Promise<Array>} 高程数据数组
-   */
-  const getSinglePointElevations = async (sampledCoordinates) => {
-    const elevations = []
-    
-    console.log(`单点查询：开始处理 ${sampledCoordinates.length} 个GCJ-02坐标点`)
-    
-    // 分批处理，避免API限制 - 使用更小的批次和更长的延迟
-    const batchSize = 2 // 减少批次大小
-    for (let i = 0; i < sampledCoordinates.length; i += batchSize) {
-      const batch = sampledCoordinates.slice(i, i + batchSize)
-      
-      // 顺序处理每个点，而不是并行处理
-      for (const coord of batch) {
-        let elevation = null
-        let retryCount = 0
-        const maxRetries = 2
-        
-        // 重试机制
-        while (elevation === null && retryCount < maxRetries) {
-          try {
-            // 注意：getElevationForPoint 内部会自动进行坐标转换
-            elevation = await getElevationForPoint(coord.lat, coord.lng)
-            
-            if (elevation === null && retryCount < maxRetries - 1) {
-              console.log(`坐标 [${coord.lat}, ${coord.lng}] 获取失败，准备重试 ${retryCount + 1}/${maxRetries}`)
-              await new Promise(resolve => setTimeout(resolve, 2000 * (retryCount + 1))) // 递增延迟
-            }
-          } catch (error) {
-            console.warn(`坐标 [${coord.lat}, ${coord.lng}] 请求出错:`, error.message)
-            if (retryCount < maxRetries - 1) {
-              await new Promise(resolve => setTimeout(resolve, 3000 * (retryCount + 1)))
-            }
-          }
-          retryCount++
-        }
-        
-        // 如果最终还是失败，使用默认高程值（可选）
-        if (elevation === null) {
-          // 静默使用默认值，不输出警告
-          elevation = 100 // 默认海拔100米
-        }
-        
-        elevations.push(elevation)
-        
-        // 每个请求之间增加延迟
-        if (elevations.length < sampledCoordinates.length) {
-          await new Promise(resolve => setTimeout(resolve, 800)) // 增加延迟到800ms
-        }
-      }
-      
-      // 批次之间的额外延迟
-      if (i + batchSize < sampledCoordinates.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000)) // 增加批次间延迟到1秒
-      }
-    }
-    
-    return elevations
-  }
 
   /**
-   * 批量获取路线点的高程数据
+   * 优化的路线高程数据获取 - 支持缓存和去重
    * @param {Array} coordinates - 坐标数组 [{lng, lat}, ...] (GCJ-02坐标系)
-   * @param {number} maxPoints - 最大采样点数（避免API请求过多）
+   * @param {number} maxPoints - 最大采样点数（默认减少到15以提升速度）
    * @param {boolean} enableSmartSampling - 是否启用智能采样（默认true）
    * @returns {Promise<Array>} 高程数据数组
    */
-  const getElevationForRoute = async (coordinates, maxPoints = 18, enableSmartSampling = true) => {
+  const getElevationForRoute = async (coordinates, maxPoints = 15, enableSmartSampling = true) => {
     if (!coordinates || coordinates.length === 0) {
-      console.warn('坐标数组为空')
+      console.warn('🚫 [优化] 坐标数组为空')
       return []
     }
 
@@ -168,72 +215,38 @@ export function useElevation() {
     elevationData.value = []
 
     try {
-      console.log(`开始获取路线高程数据，原始GCJ-02点数: ${coordinates.length}`)
+      console.log(`📍 开始获取高程数据: ${coordinates.length} 个坐标点`)
       
-      // 如果坐标点太多，进行采样以减少API调用
+      // 优化采样：减少点数以提升速度
       const sampledCoordinates = enableSmartSampling 
         ? sampleCoordinates(coordinates, maxPoints)
         : basicEqualDistanceSample(coordinates, maxPoints)
       
-      console.log(`采样后点数: ${sampledCoordinates.length}（${enableSmartSampling ? '智能' : '等间距'}采样）`)
+      console.log(`📊 采样后: ${sampledCoordinates.length} 个点`)
 
-      let elevations = []
+      // 使用优化的批量获取（支持缓存和去重）
+      const elevations = await getBatchElevationOptimized(sampledCoordinates)
+
+      // 🚫 修复：只使用有效的高程数据，避免0值污染真实数据
+      const validElevations = elevations
+        .map((elevation, index) => ({
+          elevation: elevation,
+          coordinate: sampledCoordinates[index], // 保持原始GCJ-02坐标用于距离计算
+          distance: calculateDistanceFromStart(sampledCoordinates, index),
+          index
+        }))
+        .filter(item => item.elevation !== null && item.elevation !== undefined)
       
-      // 生产环境优先使用批量API
-      if (!isDevelopment) {
-        try {
-          console.log('使用后端批量高程API（含坐标转换）')
-          
-          // 坐标系转换：批量转换 GCJ-02 → WGS-84
-          const wgs84Coordinates = batchGcj02ToWgs84(sampledCoordinates)
-          console.log(`已转换 ${wgs84Coordinates.length} 个坐标到WGS-84`)
-          
-          const response = await axios.post('/api/v1/elevation/batch', {
-            coordinates: wgs84Coordinates
-          }, {
-            timeout: 30000, // 批量查询需要更长超时
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            }
-          })
-
-          if (response.data?.success && response.data?.data) {
-            elevations = response.data.data.map(item => item.elevation)
-            console.log('批量高程查询成功:', elevations)
-          } else {
-            throw new Error('批量API响应格式错误')
-          }
-        } catch (err) {
-          // 静默处理批量API失败，直接回退到单点查询
-          if (!err.message.includes('timeout')) {
-            console.warn('批量API失败，回退到单点查询:', err.message)
-          }
-          // 回退到单点查询
-          elevations = await getSinglePointElevations(sampledCoordinates)
-        }
-      } else {
-        // 开发环境使用单点查询
-        elevations = await getSinglePointElevations(sampledCoordinates)
-      }
-
-      // 过滤掉null值并添加距离信息
-      const validElevations = elevations.map((elevation, index) => ({
-        elevation: elevation || 0,
-        coordinate: sampledCoordinates[index], // 保持原始GCJ-02坐标用于距离计算
-        distance: calculateDistanceFromStart(sampledCoordinates, index),
-        index
-      })).filter(item => item.elevation !== null)
+      console.log(`📊 有效高程数据: ${validElevations.length}/${elevations.length} 个点`)
 
       elevationData.value = validElevations
-      console.log(`成功获取 ${validElevations.length} 个点的高程数据`)
-      console.log('高程数据示例:', validElevations.slice(0, 2))
+      console.log(`✅ 高程数据获取完成: ${validElevations.length} 个点`)
       
       return validElevations
     } catch (err) {
-      console.error('批量获取高程数据失败:', err)
+      console.error('❌ 高程数据获取失败:', err.message)
       error.value = err.message
-      return []
+      throw err
     } finally {
       isLoading.value = false
     }
@@ -560,16 +573,74 @@ export function useElevation() {
     isLoading.value = false
   }
 
+  /**
+   * 清除请求缓存
+   */
+  const clearRequestCache = () => {
+    requestCache.clear()
+    console.log('🗑️ [优化] 请求缓存已清除')
+  }
+
+  /**
+   * 获取缓存统计信息
+   * @returns {Object} 缓存统计
+   */
+  const getCacheStats = () => {
+    const now = Date.now()
+    let validCount = 0
+    let expiredCount = 0
+    
+    for (const [key, value] of requestCache.entries()) {
+      if (now - value.timestamp < CACHE_DURATION) {
+        validCount++
+      } else {
+        expiredCount++
+      }
+    }
+    
+    return {
+      total: requestCache.size,
+      valid: validCount,
+      expired: expiredCount,
+      cacheHitRate: requestCache.size > 0 ? (validCount / requestCache.size * 100).toFixed(1) : 0
+    }
+  }
+
+  /**
+   * 定期清理过期缓存
+   */
+  const cleanupExpiredCache = () => {
+    const now = Date.now()
+    const keysToDelete = []
+    
+    for (const [key, value] of requestCache.entries()) {
+      if (now - value.timestamp >= CACHE_DURATION) {
+        keysToDelete.push(key)
+      }
+    }
+    
+    keysToDelete.forEach(key => requestCache.delete(key))
+    
+    if (keysToDelete.length > 0) {
+      console.log(`🧹 [优化] 清理了 ${keysToDelete.length} 个过期缓存`)
+    }
+  }
+
+  // 定期清理过期缓存（每5分钟）
+  setInterval(cleanupExpiredCache, 5 * 60 * 1000)
+
   return {
     // 响应式数据
     isLoading,
     error,
     elevationData,
     
-    // 方法
+    // 方法（优化版，支持多API和缓存）
     getElevationForPoint,
     getElevationForRoute,
     calculateElevationStats,
-    clearElevationData
+    clearElevationData,
+    clearRequestCache,
+    getCacheStats
   }
 }

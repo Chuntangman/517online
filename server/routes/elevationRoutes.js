@@ -66,44 +66,65 @@ router.post('/batch', async (req, res) => {
 
     const results = []
     
-    // 分批处理，避免API频率限制
+    // 🚫 修复：改进批量处理逻辑，减少失败率
+    console.log(`🌐 开始批量查询高程数据...`)
+    
     for (let i = 0; i < coordinates.length; i++) {
       const coord = coordinates[i]
       const locations = `${coord.lat},${coord.lng}`
+      let retryCount = 0
+      const maxRetries = 2
+      let success = false
       
-      try {
-        const response = await axios.get('https://api.open-elevation.com/api/v1/lookup', {
-          params: { locations },
-          timeout: 10000,
-          headers: {
-            'User-Agent': 'Cycling-Route-App/1.0'
-          }
-        })
+      while (!success && retryCount <= maxRetries) {
+        try {
+          const response = await axios.get('https://api.open-elevation.com/api/v1/lookup', {
+            params: { locations },
+            timeout: 15000, // 增加超时时间
+            headers: {
+              'User-Agent': 'Cycling-Route-App/1.0',
+              'Accept': 'application/json'
+            }
+          })
 
-        if (response.data?.results?.[0]) {
-          results.push({
-            ...coord,
-            elevation: Math.round(response.data.results[0].elevation)
-          })
-        } else {
-          results.push({
-            ...coord,
-            elevation: null
-          })
+          if (response.data?.results?.[0]?.elevation !== undefined) {
+            const elevation = response.data.results[0].elevation
+            results.push({
+              ...coord,
+              elevation: elevation !== null ? Math.round(elevation) : null
+            })
+            console.log(`✅ 坐标 ${locations}: ${elevation}m`)
+          } else {
+            console.warn(`⚠️ 坐标 ${locations}: 无高程数据`)
+            results.push({
+              ...coord,
+              elevation: null
+            })
+          }
+          success = true
+        } catch (error) {
+          retryCount++
+          if (retryCount <= maxRetries) {
+            console.log(`🔄 坐标 ${locations} 重试 ${retryCount}/${maxRetries}: ${error.message}`)
+            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)) // 递增延迟
+          } else {
+            console.error(`💥 坐标 ${locations} 查询最终失败:`, error.message)
+            results.push({
+              ...coord,
+              elevation: null
+            })
+          }
         }
-      } catch (error) {
-        console.error(`坐标 ${locations} 高程查询失败:`, error.message)
-        results.push({
-          ...coord,
-          elevation: null
-        })
       }
 
-      // 请求间延迟，避免频率限制
+      // 请求间延迟，避免频率限制（减少延迟时间）
       if (i < coordinates.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500))
+        await new Promise(resolve => setTimeout(resolve, 300))
       }
     }
+    
+    const validCount = results.filter(r => r.elevation !== null).length
+    console.log(`📊 批量查询完成: ${validCount}/${results.length} 个有效数据`)
 
     res.json({
       success: true,

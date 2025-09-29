@@ -284,6 +284,55 @@ class RouteController {
   }
 
   /**
+   * 获取基于地区的综合统计信息
+   * GET /api/v1/routes/region-statistics?region=地区名称
+   */
+  static async getRegionStatistics(req, res) {
+    try {
+      const { region } = req.query;
+      
+      // 获取路线统计
+      const routeOptions = region && region !== '全部' ? { region } : {};
+      const routes = await RouteModel.getAllRoutes(routeOptions);
+      const routeCount = routes.length;
+      
+      // 获取驿站统计
+      const WaystationModel = require('../models/waystationModel');
+      const waystationOptions = region && region !== '全部' ? { region } : {};
+      const waystations = await WaystationModel.getAllWaystations(waystationOptions);
+      const waystationCount = waystations.length;
+      
+      // 获取目标点统计
+      const DestinationModel = require('../models/destinationModel');
+      const destinationOptions = region && region !== '全部' ? { region } : {};
+      const destinations = await DestinationModel.getAllDestinations(destinationOptions);
+      const destinationCount = destinations.length;
+      
+      const statistics = {
+        region: region || '全部',
+        routes: routeCount,
+        waystations: waystationCount,
+        destinations: destinationCount,
+        total: routeCount + waystationCount + destinationCount
+      };
+      
+      res.status(200).json({
+        success: true,
+        message: '获取地区统计信息成功',
+        data: statistics
+      });
+      
+    } catch (error) {
+      console.error('获取地区统计失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '获取地区统计信息失败',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
+
+  /**
    * 根据途径地点ID筛选路线
    * GET /api/v1/routes/waypoint/:waypointId
    */

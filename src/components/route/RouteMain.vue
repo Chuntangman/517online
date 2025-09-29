@@ -34,6 +34,8 @@
             @route-generated="handleRouteGenerated"
             @route-selected="handleRouteSelected"
             @trajectory-playback="handleTrajectoryPlayback"
+            @route-navigate-with-markers="handleRouteNavigateWithMarkers"
+            @clear-previous-displays="handleClearPreviousDisplays"
             @start-point-changed="handleStartPointChanged"
             @end-point-changed="handleEndPointChanged"
           />
@@ -203,29 +205,11 @@ const handleEndPointChanged = (endPoint) => {
 
 // 处理路线选择
 const handleRouteSelected = (route) => {
-  console.log('选择路线:', route)
+  // 路线选择事件
   
-  // 构建路线数据用于显示路线信息面板
-  const routeData = {
-    route: {
-      id: route.id,
-      name: route.title,
-      region: route.region,
-      distance_km: parseInt(route.distance) || 0,
-      estimated_days: parseInt(route.duration) || 0,
-      road_condition: route.roadCondition,
-      remarks: route.remarks,
-      precautions: route.precautions
-    },
-    waypoints: route.waypoints || []
-  }
-  
-  console.log('显示路线信息面板，路线数据:', routeData)
-  
-  // 显示路线信息面板（这会触发高程数据获取）
-  if (mapRef.value && mapRef.value.showRouteInfoPanel) {
-    mapRef.value.showRouteInfoPanel(routeData)
-  }
+  // 不在这里直接调用 showRouteInfoPanel
+  // 路线信息面板的显示应该通过 handleRouteNavigateWithMarkers 事件处理
+  // 这样避免重复调用和重复获取高程数据
 }
 
 // 处理路线可视化
@@ -345,15 +329,18 @@ const handleRouteNavigateWithMarkers = (routeData) => {
         mapRef.value.setNavigationWaypoints(intermediateWaypoints)
       }
       
-      // 延迟执行导航规划，确保面板状态、起终点和途径点设置完成
+      // 7. 启动导航搜索，让地图跳转到相应位置并显示路线
+      console.log('启动导航搜索，显示路线...')
       setTimeout(() => {
-        mapRef.value.startNavigation()
-      }, 100)
+        if (mapRef.value.startNavigation) {
+          mapRef.value.startNavigation()
+        }
+      }, 100) // 短暂延迟确保起终点已设置
     } else {
       console.error('地图导航方法不存在')
     }
     
-    // 7. 更新天气位置到路线起点
+    // 8. 更新天气位置到路线起点
     updateWeatherLocation(startLng, startLat)
     console.log('已更新天气位置到路线起点:', startPoint.name)
     
@@ -516,7 +503,7 @@ const handleDestinationSelected = (destination) => {
 
 // 处理目标点筛选变化
 const handleDestinationsFiltered = (filteredDestinations) => {
-  console.log('目标点筛选结果变化:', filteredDestinations.length, '个地点')
+  // 目标点筛选结果变化
   
   // 保存当前筛选状态
   currentFilteredDestinations.value = filteredDestinations
@@ -557,7 +544,7 @@ const checkAndReinitializeMap = async () => {
 
 // 组件挂载时的初始化
 onMounted(async () => {
-  console.log('RouteMain 组件已挂载')
+  // RouteMain 组件已挂载
   
   // 延迟检查地图状态，确保DOM完全渲染
   setTimeout(checkAndReinitializeMap, 100)

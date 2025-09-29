@@ -313,7 +313,7 @@ watch(() => [props.longitude, props.latitude], ([newLng, newLat]) => {
 
 // 组件挂载后初始化
 onMounted(async () => {
-  console.log('Weather组件挂载，初始位置:', props.longitude, props.latitude)
+  // Weather组件挂载
   
   // 等待高德地图API加载
   const waitForAMap = () => {

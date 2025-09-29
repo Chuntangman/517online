@@ -17,16 +17,16 @@
       <span class="mode-text">{{ mapMode === 'normal' ? '卫星' : '地图' }}</span>
     </div>
 
-    <!-- 骑行导航切换按钮 - 左上角第二个 -->
-    <div class="navigation-toggle-button" @click="toggleNavigation" :title="showNavigation ? '关闭骑行导航' : '开启骑行导航'">
+    <!-- 骑行导航切换按钮 - 左上角第二个 (隐藏但保留功能) -->
+    <div class="navigation-toggle-button hidden-button" @click="toggleNavigation" :title="showNavigation ? '关闭骑行导航' : '开启骑行导航'">
       <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7z"/>
       </svg>
       <span class="nav-text">导航</span>
     </div>
 
-    <!-- 轨迹回放切换按钮 - 左上角第三个 -->
-    <div class="trajectory-toggle-button" @click="toggleTrajectory" :title="showTrajectory ? '关闭轨迹回放' : '开启轨迹回放'">
+    <!-- 轨迹回放切换按钮 - 左上角第三个 (隐藏但保留功能) -->
+    <div class="trajectory-toggle-button hidden-button" @click="toggleTrajectory" :title="showTrajectory ? '关闭轨迹回放' : '开启轨迹回放'">
       <svg class="trajectory-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <polygon points="5,3 19,12 5,21"/>
       </svg>
@@ -66,6 +66,7 @@
       @step-highlighted="handleStepHighlighted"
       @elevation-loading-changed="handleElevationLoadingChanged"
       ref="cyclingNavigationRef"
+      style="z-index: 2000;"
     />
 
     <!-- 轨迹回放组件 -->
@@ -149,10 +150,12 @@ const currentRouteData = ref(null)
 const currentNavigationInfo = ref(null)
 const currentRoutePolicy = ref('0')
 
-// 高程数据功能
+// 高程数据功能（优化版）
 const { 
   getElevationForRoute, 
-  calculateElevationStats 
+  calculateElevationStats,
+  clearRequestCache,
+  getCacheStats
 } = useElevation()
 
 // 跳转到指定位置
@@ -177,7 +180,7 @@ const jumpToLocation = (longitude, latitude, markerType = 'waystation') => {
     
     // 平滑移动到目标位置
     mapInstance.value.setZoomAndCenter(15, position, true)
-    console.log('Map.vue - 地图跳转成功，目标位置:', { longitude, latitude })
+    // 地图跳转成功
     
     // 根据标记类型创建不同的动画图标内容
     let animatedContent, offset
@@ -237,7 +240,7 @@ const updateMarkers = (filteredStations) => {
     return
   }
   
-  console.log('正在更新地图标记点，驿站数量:', filteredStations.length)
+  // 更新地图标记点
   
   // 清除所有现有标记点
   markers.value.forEach(marker => {
@@ -286,7 +289,7 @@ const updateDestinationMarkers = (filteredDestinations) => {
     return
   }
   
-  console.log('正在更新目标点标记，数量:', filteredDestinations.length)
+  // 更新目标点标记
   
   // 清除现有目标点标记
   destinationMarkers.value.forEach(marker => {
@@ -383,7 +386,7 @@ const fetchDestinations = async () => {
     }
     
     destinations.value = response.data.data
-    console.log('目标点数据加载成功，共', destinations.value.length, '个目标点')
+    // 目标点数据加载成功
   } catch (error) {
     console.error('获取目标点数据失败：', error)
   }
@@ -526,7 +529,7 @@ const addMarkersToMap = () => {
     return
   }
 
-  console.log('开始添加标记点，驿站数量：', waystations.value.length)
+  // 添加驿站标记点
 
   // 清除现有标记点
   markers.value.forEach(marker => {
@@ -546,10 +549,7 @@ const addMarkersToMap = () => {
       return
     }
 
-    console.log(`添加标记点 ${index + 1}:`, {
-      name: waystation.name,
-      position: [waystation.longitude, waystation.latitude]
-    })
+    // 添加标记点
 
     const position = new AMap.LngLat(waystation.longitude, waystation.latitude)
     const marker = new AMap.Marker({
@@ -593,7 +593,7 @@ const addDestinationMarkersToMap = () => {
     return
   }
 
-  console.log('开始添加目标点标记，数量：', destinations.value.length)
+  // 添加目标点标记
 
   // 清除现有目标点标记
   destinationMarkers.value.forEach(marker => {
@@ -613,10 +613,7 @@ const addDestinationMarkersToMap = () => {
       return
     }
 
-    console.log(`添加目标点标记 ${index + 1}:`, {
-      name: destination.name,
-      position: [destination.longitude, destination.latitude]
-    })
+    // 添加目标点标记
 
     const position = new AMap.LngLat(destination.longitude, destination.latitude)
     const marker = new AMap.Marker({
@@ -719,12 +716,7 @@ const isContainerReady = () => {
   const rect = container.getBoundingClientRect()
   const isVisible = rect.width > 0 && rect.height > 0
   
-  console.log('容器状态检查:', {
-    exists: !!container,
-    width: rect.width,
-    height: rect.height,
-    isVisible
-  })
+  // 容器状态检查
   
   return isVisible
 }
@@ -732,7 +724,7 @@ const isContainerReady = () => {
 // 初始化地图
 const initMap = async (retryCount = 0, savedCenter = null, savedZoom = null) => {
   try {
-    console.log(`开始初始化地图 (尝试第 ${retryCount + 1} 次)，模式: ${mapMode.value}`)
+    // 初始化地图
     
     // 检查网络连接
     if (!navigator.onLine) {
@@ -762,7 +754,7 @@ const initMap = async (retryCount = 0, savedCenter = null, savedZoom = null) => 
     // 获取或加载AMap实例，避免重复加载
     let AMap = globalAMapInstance || window.AMap
     if (!AMap) {
-      console.log('首次加载AMap API')
+      // 首次加载AMap API
       try {
         AMap = await AMapLoader.load({
           key: 'b7fb4f223f6cbffc2d995a508d10f7cd',
@@ -773,9 +765,8 @@ const initMap = async (retryCount = 0, savedCenter = null, savedZoom = null) => 
           }
         })
         globalAMapInstance = AMap
-        console.log('AMap API加载完成并缓存（包含图层插件和Loca库）')
-        console.log('AMap对象:', AMap)
-        console.log('Loca对象:', window.Loca)
+        // AMap API加载完成
+        // AMap和Loca对象已加载
       } catch (loadError) {
         console.warn('AMapLoader.load 警告:', loadError)
         
@@ -833,11 +824,14 @@ const initMap = async (retryCount = 0, savedCenter = null, savedZoom = null) => 
 
     // 等待地图完全加载
     map.on('complete', async () => {
-      console.log(`地图初始化完成 (${mapMode.value}模式)`)
+      // 地图初始化完成
       isMapInitialized.value = true
       
       // 添加地图控制插件
       await addMapControls(map)
+      
+      // 添加右键菜单功能
+      initContextMenu(map)
       
       // 获取驿站和目标点数据
       await fetchWaystations()
@@ -847,12 +841,12 @@ const initMap = async (retryCount = 0, savedCenter = null, savedZoom = null) => 
       navigationInitialized.value = true
       // 确保导航面板初始状态为隐藏
       showNavigation.value = false
-      console.log('导航组件已初始化（隐藏式）')
+      // 导航组件已初始化
     })
 
     // 保存地图实例
     mapInstance.value = map
-    console.log('地图实例创建成功')
+    // 地图实例创建成功
     
     return map
   } catch (error) {
@@ -936,6 +930,164 @@ const addMapControls = async (map) => {
   })
 }
 
+// 右键菜单实例
+const contextMenu = ref(null)
+
+// 初始化右键菜单
+const initContextMenu = (map) => {
+  try {
+    console.log('初始化地图右键菜单')
+    
+    // 创建右键菜单实例
+    contextMenu.value = new AMap.ContextMenu()
+    
+    // 添加菜单项 - 放大一级
+    contextMenu.value.addItem('🔍 放大一级', function() {
+      map.zoomIn()
+      console.log('右键菜单：放大一级')
+    }, 0)
+    
+    // 添加菜单项 - 缩小一级  
+    contextMenu.value.addItem('🔍 缩小一级', function() {
+      map.zoomOut()
+      console.log('右键菜单：缩小一级')
+    }, 1)
+    
+    // 添加菜单项 - 居中到此位置
+    contextMenu.value.addItem('📍 居中到此位置', function(e) {
+      const lnglat = e.lnglat || e.target.lnglat
+      if (lnglat) {
+        map.setCenter(lnglat)
+        console.log('右键菜单：居中到位置', lnglat)
+      }
+    }, 2)
+    
+    // 添加菜单项 - 切换地图模式
+    contextMenu.value.addItem(`🗺️ 切换到${mapMode.value === 'normal' ? '卫星' : '标准'}地图`, function() {
+      toggleMapMode()
+      console.log('右键菜单：切换地图模式')
+    }, 3)
+    
+    // 绑定右键菜单事件
+    map.on('rightclick', function(e) {
+      // 重新创建菜单以确保动态内容正确
+      if (contextMenu.value) {
+        contextMenu.value.close()
+        
+        // 重新创建整个菜单
+        contextMenu.value = new AMap.ContextMenu()
+        
+        // 重新添加所有菜单项
+        contextMenu.value.addItem('🔍 放大一级', function() {
+          map.zoomIn()
+          console.log('右键菜单：放大一级')
+        }, 0)
+        
+        contextMenu.value.addItem('🔍 缩小一级', function() {
+          map.zoomOut()
+          console.log('右键菜单：缩小一级')
+        }, 1)
+        
+        contextMenu.value.addItem('📍 居中到此位置', function(e) {
+          const lnglat = e.lnglat || e.target.lnglat
+          if (lnglat) {
+            map.setCenter(lnglat)
+            console.log('右键菜单：居中到位置', lnglat)
+          }
+        }, 2)
+        
+        // 添加当前正确的地图模式切换项
+        contextMenu.value.addItem(`🗺️ 切换到${mapMode.value === 'normal' ? '卫星' : '标准'}地图`, function() {
+          toggleMapMode()
+          console.log('右键菜单：切换地图模式')
+        }, 3)
+      }
+      
+      // 打开右键菜单
+      contextMenu.value.open(map, e.lnglat)
+      console.log('右键菜单已打开，位置:', e.lnglat)
+    })
+    
+    console.log('地图右键菜单初始化完成')
+    
+  } catch (error) {
+    console.error('右键菜单初始化失败:', error)
+  }
+}
+
+// 降级复制文本到剪贴板（兼容旧浏览器）
+const fallbackCopyTextToClipboard = (text) => {
+  try {
+    const textArea = document.createElement('textarea')
+    textArea.value = text
+    textArea.style.position = 'fixed'
+    textArea.style.left = '-999999px'
+    textArea.style.top = '-999999px'
+    document.body.appendChild(textArea)
+    textArea.focus()
+    textArea.select()
+    
+    const successful = document.execCommand('copy')
+    document.body.removeChild(textArea)
+    
+    if (successful) {
+      console.log('坐标已复制到剪贴板（降级方案):', text)
+      showCopySuccess(text)
+    } else {
+      console.error('复制失败（降级方案）')
+      showToast('复制失败，请手动复制坐标')
+    }
+  } catch (err) {
+    console.error('复制失败:', err)
+    showToast('复制失败，请手动复制坐标')
+  }
+}
+
+// 显示复制成功提示
+const showCopySuccess = (coordText) => {
+  showToast(`坐标已复制: ${coordText}`)
+}
+
+// 显示临时提示信息
+const showToast = (message) => {
+  // 创建提示元素
+  const toast = document.createElement('div')
+  toast.textContent = message
+  toast.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 10000;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  `
+  
+  document.body.appendChild(toast)
+  
+  // 显示动画
+  setTimeout(() => {
+    toast.style.opacity = '1'
+  }, 10)
+  
+  // 2秒后隐藏并移除
+  setTimeout(() => {
+    toast.style.opacity = '0'
+    setTimeout(() => {
+      if (toast.parentNode) {
+        document.body.removeChild(toast)
+      }
+    }, 300)
+  }, 2000)
+}
+
 // 切换地图样式（仅在标准模式下生效）
 const changeMapStyle = () => {
   if (mapInstance.value && mapMode.value === 'normal') {
@@ -966,6 +1118,12 @@ const toggleMapMode = async () => {
     
     console.log('保存当前地图状态:', { center, zoom })
     
+    // 清理右键菜单
+    if (contextMenu.value) {
+      contextMenu.value.close()
+      contextMenu.value = null
+    }
+    
     // 更新模式
     mapMode.value = newMode
     
@@ -977,7 +1135,7 @@ const toggleMapMode = async () => {
     // 等待DOM更新
     await nextTick()
     
-    // 重新初始化地图
+    // 重新初始化地图（右键菜单会在地图初始化完成后自动重建）
     await initMap(0, center, zoom)
     
     console.log(`地图已切换到${newMode === 'satellite' ? '卫星' : '标准'}模式`)
@@ -1101,7 +1259,7 @@ const drawRouteCurve = (waypoints) => {
       return false
     }
 
-    console.log('开始绘制路线，有效途径点数量:', validPoints.length)
+    // 开始绘制路线
 
     // 构建贝塞尔曲线路径
     const path = buildBezierPath(validPoints)
@@ -1409,7 +1567,7 @@ const clearRouteCurve = () => {
 
 // 组件挂载后初始化地图
 onMounted(async () => {
-  console.log('Map组件挂载')
+  // Map组件挂载
   
   // 不再记录通用页面访问，只记录有价值的导航和路线相关行为
   
@@ -1436,12 +1594,12 @@ onMounted(async () => {
     }
   } else {
     // 加载新脚本
-    console.log('加载高德地图API')
+    // 加载高德地图API
     const script = document.createElement('script')
     script.src = 'https://webapi.amap.com/loader.js'
     script.async = true
     script.onload = async () => {
-      console.log('高德地图API加载完成')
+      // 高德地图API加载完成
       try {
         await initMap()
         setupResizeObserver()
@@ -1459,6 +1617,13 @@ onMounted(async () => {
 // 组件卸载时的清理
 onUnmounted(() => {
   console.log('Map组件卸载')
+  
+  // 清理右键菜单
+  if (contextMenu.value) {
+    contextMenu.value.close()
+    contextMenu.value = null
+    console.log('右键菜单已清理')
+  }
   
   // 销毁地图实例
   if (mapInstance.value) {
@@ -1498,7 +1663,7 @@ const hasActiveRoute = () => {
 
 // 添加驿站标记（与现有路线共存）
 const addWaystationsToRoute = (filteredData = null) => {
-  console.log('添加驿站标记到现有路线')
+  // 添加驿站标记到现有路线
   if (filteredData) {
     updateMarkers(filteredData)
   } else {
@@ -1514,20 +1679,25 @@ const toggleNavigation = () => {
 
 // 处理路线规划完成事件
 const handleRoutePlanned = (data) => {
-  console.log('骑行路线规划完成:', data)
+  // 骑行路线规划完成
   
-  // 更新导航信息，包含高程数据
+  // 更新导航信息，保护已有的高程数据
   if (data.info) {
+    // 如果当前已有高程数据，保持不变；否则使用新的高程数据
+    const existingElevationStats = currentNavigationInfo.value?.elevationStats
+    const existingElevationData = currentNavigationInfo.value?.elevationData
+    
     currentNavigationInfo.value = {
       ...data.info,
-      elevationStats: data.elevationStats || null
+      elevationStats: existingElevationStats || data.elevationStats || null,
+      elevationData: existingElevationData || data.elevationData || []
     }
-    console.log('导航信息已更新，包含高程数据:', currentNavigationInfo.value)
+    // 导航信息已更新
   }
   
   // 只有在显示路线信息面板模式下才更新面板，绝不自动显示导航界面
   if (currentRouteData.value && showRouteInfo.value) {
-    console.log('更新路线信息面板的导航数据')
+    // 更新路线信息面板的导航数据
     // 确保导航面板保持隐藏状态
     forceHideNavigation()
   }
@@ -1649,17 +1819,16 @@ const handleElevationLoadingChanged = (loading) => {
   console.log('高程加载状态变化:', loading)
 }
 
-// 为路线信息面板获取高程数据
+// 为路线信息面板获取高程数据（优化版，避免重复获取）
 const fetchElevationForRouteInfo = async (routeData) => {
   try {
-    console.log('开始为路线信息面板准备高程数据')
+    // 开始准备高程数据
     elevationLoading.value = true
     
     // 优先检查是否已有高程数据（避免重复获取）
     if (routeData.elevationStats && routeData.elevationData && routeData.elevationData.length > 0) {
-      console.log('使用已有的高程数据，避免重复请求API')
-      console.log('已有高程统计:', routeData.elevationStats)
-      console.log('已有高程数据点数:', routeData.elevationData.length)
+      // 使用已有的高程数据
+      // 使用路线数据中已有的高程信息
       
       // 直接使用已有数据
       currentNavigationInfo.value = {
@@ -1667,28 +1836,36 @@ const fetchElevationForRouteInfo = async (routeData) => {
         elevationStats: routeData.elevationStats,
         elevationData: routeData.elevationData
       }
+      // 已更新导航信息，使用现有高程数据
       return
     }
     
-    console.log('未找到已有高程数据，开始重新获取')
+    // 检查当前导航信息中是否已有高程数据
+    if (currentNavigationInfo.value?.elevationStats && currentNavigationInfo.value?.elevationData && currentNavigationInfo.value.elevationData.length > 0) {
+      // 当前导航信息已有高程数据，无需重复获取
+      // 已有高程数据，无需重复获取
+      return
+    }
+    
+    // 未找到已有高程数据，开始重新获取
     
     // 从路线数据中提取坐标
     const coordinates = extractCoordinatesFromRouteData(routeData)
     
     if (coordinates.length === 0) {
-      console.warn('无法从路线数据中提取坐标，跳过高程数据获取')
+      console.warn('⚠️ 无法从路线数据中提取坐标')
       return
     }
     
-    console.log(`提取到 ${coordinates.length} 个坐标点`)
+    // 提取坐标点
     
     // 获取高程数据（使用智能采样）
-    const elevationResults = await getElevationForRoute(coordinates, 18, true)
+    const elevationResults = await getElevationForRoute(coordinates, 20, true)
     
     if (elevationResults && elevationResults.length > 0) {
       // 计算高程统计信息
       const elevationStats = calculateElevationStats(elevationResults)
-      console.log('高程数据获取成功:', elevationStats)
+      console.log('✅ 高程数据获取完成')
       
       // 更新导航信息，包含高程数据
       currentNavigationInfo.value = {
@@ -1696,14 +1873,16 @@ const fetchElevationForRouteInfo = async (routeData) => {
         elevationStats: elevationStats,
         elevationData: elevationResults // 添加原始高程数据用于图表显示
       }
+      // 已更新导航信息
     } else {
-      console.warn('未获取到有效的高程数据')
+      console.warn('⚠️ 未获取到有效的高程数据')
     }
     
   } catch (error) {
-    console.error('获取高程数据失败:', error)
+    console.error('❌ 获取高程数据失败:', error.message)
   } finally {
     elevationLoading.value = false
+    // 高程数据获取流程结束
   }
 }
 
@@ -1739,21 +1918,23 @@ const extractCoordinatesFromRouteData = (routeData) => {
 
 // 通过编程方式设置导航起点（供外部调用）
 const setNavigationStart = (longitude, latitude) => {
+  console.log('setNavigationStart调用:', { longitude, latitude, hasRef: !!cyclingNavigationRef.value })
   if (cyclingNavigationRef.value) {
     cyclingNavigationRef.value.setStartPoint(longitude, latitude)
-    if (!showNavigation.value) {
-      showNavigation.value = true
-    }
+    console.log('导航起点已设置')
+  } else {
+    console.error('CyclingNavigation组件引用不存在')
   }
 }
 
 // 通过编程方式设置导航终点（供外部调用）
 const setNavigationEnd = (longitude, latitude) => {
+  console.log('setNavigationEnd调用:', { longitude, latitude, hasRef: !!cyclingNavigationRef.value })
   if (cyclingNavigationRef.value) {
     cyclingNavigationRef.value.setEndPoint(longitude, latitude)
-    if (!showNavigation.value) {
-      showNavigation.value = true
-    }
+    console.log('导航终点已设置')
+  } else {
+    console.error('CyclingNavigation组件引用不存在')
   }
 }
 
@@ -1761,9 +1942,8 @@ const setNavigationEnd = (longitude, latitude) => {
 const setNavigationStartKeyword = (keyword, city = '北京') => {
   if (cyclingNavigationRef.value) {
     cyclingNavigationRef.value.setStartKeyword(keyword, city)
-    if (!showNavigation.value) {
-      showNavigation.value = true
-    }
+    // 🚫 [修复] 路线信息展示模式下不自动显示导航面板
+    // 设置导航起点关键字
   }
 }
 
@@ -1771,9 +1951,8 @@ const setNavigationStartKeyword = (keyword, city = '北京') => {
 const setNavigationEndKeyword = (keyword, city = '北京') => {
   if (cyclingNavigationRef.value) {
     cyclingNavigationRef.value.setEndKeyword(keyword, city)
-    if (!showNavigation.value) {
-      showNavigation.value = true
-    }
+    // 🚫 [修复] 路线信息展示模式下不自动显示导航面板
+    // 设置导航终点关键字
   }
 }
 
@@ -1781,14 +1960,18 @@ const setNavigationEndKeyword = (keyword, city = '北京') => {
 const setNavigationWaypoints = (waypoints) => {
   if (cyclingNavigationRef.value) {
     cyclingNavigationRef.value.setWaypoints(waypoints)
-    console.log('设置导航途径点:', waypoints)
+    // 设置导航途径点
   }
 }
 
 // 开始导航规划（供外部调用）
 const startNavigation = () => {
+  console.log('startNavigation调用:', { hasRef: !!cyclingNavigationRef.value, navigationInitialized: navigationInitialized.value })
   if (cyclingNavigationRef.value) {
+    console.log('开始执行导航搜索...')
     cyclingNavigationRef.value.searchRoute()
+  } else {
+    console.error('CyclingNavigation组件引用不存在，无法开始导航')
   }
 }
 
@@ -2048,7 +2231,7 @@ const clearTrajectoryPlayback = () => {
 
 // 显示路线信息面板（供外部调用）
 const showRouteInfoPanel = async (routeData) => {
-  console.log('显示路线信息面板:', routeData)
+  // 显示路线信息面板
   // 强制隐藏导航面板，防止任何闪现
   forceHideNavigation()
   // 立即设置路线数据和显示面板
@@ -2057,21 +2240,29 @@ const showRouteInfoPanel = async (routeData) => {
   
   // 初始化导航信息（为高程数据准备）
   if (routeData.route) {
+    // 保持现有的高程数据（如果有的话）
+    const existingElevationStats = currentNavigationInfo.value?.elevationStats
+    const existingElevationData = currentNavigationInfo.value?.elevationData
+    
     currentNavigationInfo.value = {
       distance: routeData.route.distance_km ? `${routeData.route.distance_km}km` : '未知',
       time: routeData.route.estimated_days ? `${routeData.route.estimated_days}天` : '未知',
-      elevationStats: null // 将由高程获取函数填充
+      elevationStats: existingElevationStats || null, // 保持现有数据
+      elevationData: existingElevationData || [] // 保持现有数据
     }
   }
   
-  // 获取高程数据
-  await fetchElevationForRouteInfo(routeData)
+  // 只有在没有高程数据时才获取
+  if (!currentNavigationInfo.value?.elevationStats || !currentNavigationInfo.value?.elevationData || currentNavigationInfo.value.elevationData.length === 0) {
+    // 获取高程数据
+    await fetchElevationForRouteInfo(routeData)
+  }
   
   // 双重保险，再次确保导航面板隐藏
   setTimeout(() => {
     forceHideNavigation()
   }, 50)
-  console.log('已确保CyclingNavigation面板完全隐藏，显示简洁RouteInfoPanel')
+  // RouteInfoPanel 已显示
 }
 
 // 暴露方法给父组件
@@ -2121,6 +2312,11 @@ defineExpose({
   width: 100%;
   height: 100%;
   position: relative;
+}
+
+/* 隐藏按钮样式 */
+.hidden-button {
+  display: none !important;
 }
 
 /* 标记点动画 */
@@ -2332,6 +2528,45 @@ defineExpose({
   background: rgba(64, 158, 255, 0.1) !important;
   transform: scale(1.05);
 }
+
+/* 右键菜单样式优化 */
+:deep(.amap-menu) {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.8) !important;
+  overflow: hidden !important;
+  min-width: 180px !important;
+}
+
+:deep(.amap-menu .amap-menu-item) {
+  padding: 10px 16px !important;
+  font-size: 14px !important;
+  color: #333 !important;
+  transition: all 0.2s ease !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+:deep(.amap-menu .amap-menu-item:last-child) {
+  border-bottom: none !important;
+}
+
+:deep(.amap-menu .amap-menu-item:hover) {
+  background: rgba(64, 158, 255, 0.08) !important;
+  color: #409eff !important;
+  transform: translateX(2px) !important;
+}
+
+:deep(.amap-menu .amap-menu-item:active) {
+  background: rgba(64, 158, 255, 0.15) !important;
+  transform: translateX(1px) !important;
+}
+
 
 /* 响应式设计 */
 @media (max-width: 768px) {

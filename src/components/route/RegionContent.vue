@@ -27,7 +27,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRegions } from '@/composables/useRegions.js'
 
 // 接收父组件传递的参数
@@ -45,14 +45,37 @@ const regionStats = ref({
   destinations: 0
 })
 
-// 模拟获取地区统计数据的函数
+// 获取地区统计数据的函数
 const fetchRegionStats = async () => {
-  // 这里可以根据需要调用实际的API获取统计数据
-  // 暂时使用模拟数据
-  regionStats.value = {
-    routes: Math.floor(Math.random() * 50) + 10,
-    waystations: Math.floor(Math.random() * 100) + 20,
-    destinations: Math.floor(Math.random() * 30) + 5
+  try {
+    // 调用真实的API获取统计数据
+    const region = selectedRegion.value === '全部' ? '' : selectedRegion.value
+    const response = await fetch(`/api/v1/routes/region-statistics?region=${encodeURIComponent(region)}`)
+    
+    if (!response.ok) {
+      throw new Error('获取统计数据失败')
+    }
+    
+    const result = await response.json()
+    
+    if (result.success && result.data) {
+      regionStats.value = {
+        routes: result.data.routes || 0,
+        waystations: result.data.waystations || 0,
+        destinations: result.data.destinations || 0
+      }
+      console.log('地区统计数据获取成功:', result.data)
+    } else {
+      throw new Error(result.message || '数据格式错误')
+    }
+  } catch (error) {
+    console.error('获取地区统计数据失败:', error)
+    // 失败时显示0值而不是随机数据
+    regionStats.value = {
+      routes: 0,
+      waystations: 0,
+      destinations: 0
+    }
   }
 }
 
@@ -60,6 +83,14 @@ const fetchRegionStats = async () => {
 onMounted(() => {
   fetchRegionStats()
 })
+
+// 监听地区变化，重新获取统计数据
+watch(selectedRegion, (newRegion, oldRegion) => {
+  if (newRegion !== oldRegion) {
+    console.log('地区变化，重新获取统计数据:', newRegion)
+    fetchRegionStats()
+  }
+}, { immediate: false })
 </script>
 
 <style scoped>

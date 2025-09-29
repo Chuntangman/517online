@@ -25,7 +25,7 @@ class SimplifiedAnalytics {
       this.flush()
     })
     
-    console.log('📊 Simplified Analytics initialized with session:', this.sessionId)
+    // Analytics initialized
   }
 
   /**
@@ -62,7 +62,7 @@ class SimplifiedAnalytics {
    */
   async trackRouteNavigation(data) {
     try {
-      console.log('📊 记录导航路线规划:', data)
+      // 记录导航路线规划
       
       // 准备数据
       const requestData = {
@@ -81,7 +81,7 @@ class SimplifiedAnalytics {
       const response = await axios.post('/api/v1/analytics-simple/route-navigation', requestData)
       
       if (response.data.success) {
-        console.log('✅ 导航记录发送成功')
+        // 导航记录发送成功
       }
     } catch (error) {
       console.warn('⚠️ 导航记录发送失败:', error.message)
@@ -110,7 +110,7 @@ class SimplifiedAnalytics {
       const response = await axios.post('/api/v1/analytics-simple/popular-route-click', requestData)
       
       if (response.data.success) {
-        console.log('✅ 热门路线点击记录发送成功')
+        // 热门路线点击记录发送成功
       }
     } catch (error) {
       console.warn('⚠️ 热门路线点击记录发送失败:', error.message)
@@ -138,7 +138,7 @@ class SimplifiedAnalytics {
       }
       const response = await axios.post('/api/v1/analytics-simple/smart-route-match', requestData)
       if (response.data.success) {
-        console.log('✅ 智能路线匹配记录发送成功')
+        // 智能路线匹配记录发送成功
       }
     } catch (error) {
       console.warn('⚠️ 智能路线匹配记录发送失败:', error.message)

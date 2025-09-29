@@ -34,15 +34,15 @@ export function useWaystation() {
         ? '/api/v1/waystations'
         : 'http://localhost:3000/api/v1/waystations'
       
-      console.log('正在获取驿站数据，API地址:', apiUrl)
+      // 获取驿站数据
       const response = await axios.get(apiUrl)
       
-      console.log('API响应:', response.data)
+      // API响应
       
       if (response.data && response.data.data) {
         waystations.value = response.data.data
         filteredWaystations.value = response.data.data
-        console.log('驿站数据加载成功，共', response.data.data.length, '个驿站')
+        // 驿站数据加载成功
         return response.data.data
       } else {
         console.error('API响应格式不正确:', response.data)

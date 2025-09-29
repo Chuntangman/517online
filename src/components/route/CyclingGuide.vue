@@ -238,7 +238,7 @@ const handleSearch = () => {
 
 // 监听筛选结果变化
 watch(filteredDestinations, (newFiltered) => {
-  console.log('目标点筛选结果变化:', newFiltered.length, '个地点')
+  // 目标点筛选结果变化
   emit('destinations-filtered', newFiltered)
 }, { immediate: true })
 

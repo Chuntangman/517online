@@ -204,6 +204,14 @@ router.post('/smart-match', RouteController.getSmartMatchedRoutes);
 router.get('/statistics', RouteController.getRouteStatistics);
 
 /**
+ * @route   GET /api/v1/routes/region-statistics
+ * @desc    获取基于地区的综合统计信息
+ * @access  Public
+ * @query   region (可选) - 地区名称，不传或传"全部"表示所有地区
+ */
+router.get('/region-statistics', RouteController.getRegionStatistics);
+
+/**
  * @route   GET /api/v1/routes/:id/waypoints
  * @desc    获取路线的途径点详情
  * @access  Public

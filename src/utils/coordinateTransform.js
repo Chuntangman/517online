@@ -92,7 +92,7 @@ export function gcj02ToWgs84(gcjLng, gcjLat) {
   const mglat = gcjLat - dlat
   const mglng = gcjLng - dlng
 
-  console.log(`坐标转换 GCJ-02[${gcjLng}, ${gcjLat}] → WGS-84[${mglng.toFixed(6)}, ${mglat.toFixed(6)}]`)
+  // console.log(`坐标转换 GCJ-02[${gcjLng}, ${gcjLat}] → WGS-84[${mglng.toFixed(6)}, ${mglat.toFixed(6)}]`)
   
   return {
     lng: parseFloat(mglng.toFixed(6)),

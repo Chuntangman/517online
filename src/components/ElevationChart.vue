@@ -19,6 +19,7 @@
         </div>
         <div class="loading-stats" v-else-if="loading">
           <span class="loading-text">正在获取高程数据...</span>
+          <small class="loading-hint">使用缓存和批量处理优化速度</small>
         </div>
         <!-- 放大按钮 -->
         <button 
@@ -606,17 +607,29 @@ const debouncedInit = () => {
   }, 100)
 }
 
-// 监听数据变化
-watch(() => props.elevationData, (newData) => {
-  console.log('高程数据变化:', newData ? newData.length : 0, '个点')
+// 监听数据变化（优化版，避免不必要的重建）
+watch(() => props.elevationData, (newData, oldData) => {
+  console.log('🔄 [调试] 高程数据变化:', newData ? newData.length : 0, '个点')
   
   if (newData && newData.length > 0) {
-    console.log('准备创建图表')
-    debouncedInit()
+    // 检查数据是否真的发生了变化
+    const dataChanged = !oldData || oldData.length !== newData.length || 
+                        JSON.stringify(oldData) !== JSON.stringify(newData)
+    
+    if (dataChanged) {
+      console.log('📈 [调试] 数据确实发生变化，准备创建图表')
+      debouncedInit()
+    } else {
+      console.log('📊 [调试] 数据未变化，跳过图表重建')
+    }
   } else {
-    // 如果没有数据，销毁图表
-    destroyChart()
-    console.log('无数据，销毁图表')
+    // 只有在真的没有数据时才销毁图表
+    if (oldData && oldData.length > 0) {
+      destroyChart()
+      console.log('🗑️ [调试] 数据清空，销毁图表')
+    } else {
+      console.log('📊 [调试] 数据依然为空，无需操作')
+    }
   }
 }, { 
   deep: true, 
@@ -962,6 +975,14 @@ onUnmounted(() => {
   color: #4CAF50;
   font-size: 12px;
   font-weight: 500;
+}
+
+.loading-hint {
+  display: block;
+  color: #999;
+  font-size: 10px;
+  margin-top: 4px;
+  font-style: italic;
 }
 
 .loading-placeholder {
