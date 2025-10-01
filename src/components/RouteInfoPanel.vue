@@ -1,19 +1,56 @@
 <template>
-  <div class="route-info-panel" :class="{ 'collapsed': isCollapsed }">
+  <div 
+    class="route-info-panel" 
+    :class="{ 'collapsed': isCollapsed, 'dragging': isDragging, 'resizing': isResizing }"
+    :style="panelStyle"
+    ref="panelRef"
+  >
     <!-- 面板头部 -->
-    <div class="panel-header" @click="togglePanel">
+    <div 
+      class="panel-header" 
+      @mousedown="startDrag"
+      @dblclick="togglePanel"
+    >
       <div class="panel-title">
-        <svg class="title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <svg class="drag-handle" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path d="M9 11H7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-2"/>
           <path d="M13 11V7a4 4 0 0 0-8 0v4"/>
         </svg>
         <span>{{ routeData?.route?.name || '热门路线' }}</span>
+        <div class="panel-controls">
+          <button class="control-btn minimize-btn" @click.stop="togglePanel" :title="isCollapsed ? '展开面板' : '收起面板'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <polyline :points="isCollapsed ? '6,9 12,15 18,9' : '18,15 12,9 6,15'"/>
+            </svg>
+          </button>
+          <button class="control-btn reset-btn" @click.stop="resetPosition" title="重置位置和大小">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+              <path d="M21 3v5h-5"/>
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+              <path d="M3 21v-5h5"/>
+            </svg>
+          </button>
+        </div>
       </div>
-      <button class="collapse-btn" :title="isCollapsed ? '展开面板' : '收起面板'">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <polyline :points="isCollapsed ? '6,9 12,15 18,9' : '18,15 12,9 6,15'"/>
-        </svg>
-      </button>
+    </div>
+
+    <!-- 调整大小手柄 -->
+    <div 
+      v-show="!isCollapsed"
+      class="resize-handles"
+    >
+      <!-- 四个角的调整手柄 -->
+      <div class="resize-handle corner nw" @mousedown="startResize('nw')" title="调整大小"></div>
+      <div class="resize-handle corner ne" @mousedown="startResize('ne')" title="调整大小"></div>
+      <div class="resize-handle corner sw" @mousedown="startResize('sw')" title="调整大小"></div>
+      <div class="resize-handle corner se" @mousedown="startResize('se')" title="调整大小"></div>
+      
+      <!-- 四个边的调整手柄 -->
+      <div class="resize-handle edge n" @mousedown="startResize('n')" title="调整高度"></div>
+      <div class="resize-handle edge s" @mousedown="startResize('s')" title="调整高度"></div>
+      <div class="resize-handle edge w" @mousedown="startResize('w')" title="调整宽度"></div>
+      <div class="resize-handle edge e" @mousedown="startResize('e')" title="调整宽度"></div>
     </div>
 
     <!-- 面板内容 -->
@@ -311,7 +348,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import ElevationChart from './ElevationChart.vue'
 
 // Props
@@ -350,10 +387,191 @@ const isCollapsed = ref(false)
 const waypointsExpanded = ref(false)
 const selectedPolicy = ref(props.currentPolicy)
 
+// 拖拽和调整大小相关状态
+const panelRef = ref(null)
+const isDragging = ref(false)
+const isResizing = ref(false)
+const dragStartX = ref(0)
+const dragStartY = ref(0)
+const resizeDirection = ref('')
+
+// 面板位置和大小状态
+const panelPosition = ref({
+  x: 20,
+  y: 20,
+  width: 480,
+  height: 600
+})
+
+// 默认配置
+const defaultConfig = {
+  x: 20,
+  y: 20,
+  width: 480,
+  height: 600,
+  minWidth: 360,
+  minHeight: 400,
+  maxWidth: 800,
+  maxHeight: 900
+}
+
+// 计算面板样式
+const panelStyle = computed(() => ({
+  left: `${panelPosition.value.x}px`,
+  top: `${panelPosition.value.y}px`,
+  width: `${panelPosition.value.width}px`,
+  height: isCollapsed.value ? 'auto' : `${panelPosition.value.height}px`,
+  position: 'fixed',
+  zIndex: isDragging.value || isResizing.value ? 1100 : 1000
+}))
+
+
+// 拖拽功能
+const startDrag = (event) => {
+  if (event.target.closest('.control-btn')) {
+    return // 如果点击的是控制按钮，不开始拖拽
+  }
+  
+  isDragging.value = true
+  dragStartX.value = event.clientX - panelPosition.value.x
+  dragStartY.value = event.clientY - panelPosition.value.y
+  
+  document.addEventListener('mousemove', handleDrag)
+  document.addEventListener('mouseup', stopDrag)
+  document.body.style.userSelect = 'none'
+  document.body.style.cursor = 'grabbing'
+  
+  event.preventDefault()
+}
+
+const handleDrag = (event) => {
+  if (!isDragging.value) return
+  
+  const newX = event.clientX - dragStartX.value
+  const newY = event.clientY - dragStartY.value
+  
+  // 边界检查
+  const maxX = window.innerWidth - panelPosition.value.width
+  const maxY = window.innerHeight - (isCollapsed.value ? 60 : panelPosition.value.height)
+  
+  panelPosition.value.x = Math.max(0, Math.min(newX, maxX))
+  panelPosition.value.y = Math.max(0, Math.min(newY, maxY))
+}
+
+const stopDrag = () => {
+  isDragging.value = false
+  document.removeEventListener('mousemove', handleDrag)
+  document.removeEventListener('mouseup', stopDrag)
+  document.body.style.userSelect = ''
+  document.body.style.cursor = ''
+}
+
+// 调整大小功能
+const startResize = (direction) => {
+  isResizing.value = true
+  resizeDirection.value = direction
+  
+  const startX = event.clientX
+  const startY = event.clientY
+  const startWidth = panelPosition.value.width
+  const startHeight = panelPosition.value.height
+  const startLeft = panelPosition.value.x
+  const startTop = panelPosition.value.y
+  
+  const handleResize = (event) => {
+    if (!isResizing.value) return
+    
+    const deltaX = event.clientX - startX
+    const deltaY = event.clientY - startY
+    
+    let newWidth = startWidth
+    let newHeight = startHeight
+    let newX = startLeft
+    let newY = startTop
+    
+    // 根据调整方向计算新的尺寸和位置
+    if (direction.includes('e')) {
+      newWidth = Math.max(defaultConfig.minWidth, Math.min(defaultConfig.maxWidth, startWidth + deltaX))
+    }
+    if (direction.includes('w')) {
+      newWidth = Math.max(defaultConfig.minWidth, Math.min(defaultConfig.maxWidth, startWidth - deltaX))
+      newX = startLeft + (startWidth - newWidth)
+    }
+    if (direction.includes('s')) {
+      newHeight = Math.max(defaultConfig.minHeight, Math.min(defaultConfig.maxHeight, startHeight + deltaY))
+    }
+    if (direction.includes('n')) {
+      newHeight = Math.max(defaultConfig.minHeight, Math.min(defaultConfig.maxHeight, startHeight - deltaY))
+      newY = startTop + (startHeight - newHeight)
+    }
+    
+    // 边界检查
+    if (newX < 0) {
+      newWidth += newX
+      newX = 0
+    }
+    if (newY < 0) {
+      newHeight += newY
+      newY = 0
+    }
+    if (newX + newWidth > window.innerWidth) {
+      newWidth = window.innerWidth - newX
+    }
+    if (newY + newHeight > window.innerHeight) {
+      newHeight = window.innerHeight - newY
+    }
+    
+    panelPosition.value.width = newWidth
+    panelPosition.value.height = newHeight
+    panelPosition.value.x = newX
+    panelPosition.value.y = newY
+  }
+  
+  const stopResize = () => {
+    isResizing.value = false
+    resizeDirection.value = ''
+    document.removeEventListener('mousemove', handleResize)
+    document.removeEventListener('mouseup', stopResize)
+    document.body.style.userSelect = ''
+    document.body.style.cursor = ''
+  }
+  
+  document.addEventListener('mousemove', handleResize)
+  document.addEventListener('mouseup', stopResize)
+  document.body.style.userSelect = 'none'
+  
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+// 重置位置和大小
+const resetPosition = () => {
+  panelPosition.value = { ...defaultConfig }
+}
+
+// 智能定位（避免超出屏幕）
+const adjustPosition = () => {
+  const maxX = window.innerWidth - panelPosition.value.width
+  const maxY = window.innerHeight - panelPosition.value.height
+  
+  if (panelPosition.value.x > maxX) {
+    panelPosition.value.x = Math.max(0, maxX)
+  }
+  if (panelPosition.value.y > maxY) {
+    panelPosition.value.y = Math.max(0, maxY)
+  }
+}
 
 // 方法
 const togglePanel = () => {
   isCollapsed.value = !isCollapsed.value
+  
+  // 展开时调整位置以确保不超出屏幕
+  if (!isCollapsed.value) {
+    nextTick(() => {
+      adjustPosition()
+    })
+  }
 }
 
 const formatDistance = (distance) => {
@@ -430,34 +648,72 @@ const updatePolicy = (policy) => {
   selectedPolicy.value = policy
 }
 
+// 窗口大小变化处理
+const handleWindowResize = () => {
+  adjustPosition()
+}
+
+// 生命周期钩子
+onMounted(() => {
+  window.addEventListener('resize', handleWindowResize)
+  
+  // 初始位置调整
+  nextTick(() => {
+    adjustPosition()
+  })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleWindowResize)
+  
+  // 清理事件监听器
+  document.removeEventListener('mousemove', handleDrag)
+  document.removeEventListener('mouseup', stopDrag)
+  document.body.style.userSelect = ''
+  document.body.style.cursor = ''
+})
 
 // 暴露方法
 defineExpose({
   togglePanel,
   isCollapsed,
-  updatePolicy
+  updatePolicy,
+  resetPosition,
+  panelPosition
 })
 </script>
 
 <style scoped>
 .route-info-panel {
-  position: fixed;
-  top: 10px;
-  left: 10px;
-  width: 420px;
-  max-height: 85vh;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  z-index: 1000;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 16px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(12px);
+  border: 2px solid rgba(255, 255, 255, 0.3);
   overflow: hidden;
-  transition: all 0.3s ease;
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
+  user-select: none;
+  min-width: 360px;
+  min-height: 400px;
+}
+
+.route-info-panel:hover {
+  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.2);
+}
+
+.route-info-panel.dragging {
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.25);
+  transform: rotate(1deg);
+  z-index: 1100 !important;
+}
+
+.route-info-panel.resizing {
+  box-shadow: 0 16px 64px rgba(76, 175, 80, 0.3);
+  border-color: rgba(76, 175, 80, 0.5);
 }
 
 .route-info-panel.collapsed {
-  height: auto;
+  height: auto !important;
 }
 
 .panel-header {
@@ -467,49 +723,201 @@ defineExpose({
   padding: 16px 20px;
   background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
   color: white;
-  cursor: pointer;
-  border-radius: 12px 12px 0 0;
+  cursor: grab;
+  border-radius: 14px 14px 0 0;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.panel-header:active {
+  cursor: grabbing;
+}
+
+.panel-header:hover {
+  background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%);
 }
 
 .panel-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex: 1;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
   font-size: 16px;
   font-weight: 600;
 }
 
-.title-icon {
+.drag-handle {
   width: 20px;
   height: 20px;
   stroke-width: 2;
+  opacity: 0.9;
+  transition: opacity 0.2s ease;
 }
 
-.collapse-btn {
-  background: rgba(255, 255, 255, 0.2);
+.panel-header:hover .drag-handle {
+  opacity: 1;
+}
+
+.panel-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.control-btn {
+  background: rgba(255, 255, 255, 0.15);
   border: none;
-  border-radius: 6px;
-  padding: 6px;
+  border-radius: 8px;
+  padding: 8px;
   cursor: pointer;
   color: white;
   transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.collapse-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
+.control-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.05);
 }
 
-.collapse-btn svg {
+.control-btn:active {
+  transform: scale(0.95);
+}
+
+.control-btn svg {
   width: 16px;
   height: 16px;
   stroke-width: 2;
 }
 
+.minimize-btn svg {
+  transition: transform 0.3s ease;
+}
+
+.reset-btn:hover {
+  background: rgba(255, 193, 7, 0.3);
+}
+
+/* 调整大小手柄 */
+.resize-handles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.resize-handle {
+  position: absolute;
+  pointer-events: auto;
+  transition: all 0.2s ease;
+}
+
+/* 角落调整手柄 */
+.resize-handle.corner {
+  width: 12px;
+  height: 12px;
+  background: rgba(76, 175, 80, 0.8);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  opacity: 0;
+  transition: all 0.2s ease;
+}
+
+.route-info-panel:hover .resize-handle.corner {
+  opacity: 1;
+}
+
+.resize-handle.corner:hover {
+  background: rgba(76, 175, 80, 1);
+  transform: scale(1.2);
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4);
+}
+
+.resize-handle.nw {
+  top: -6px;
+  left: -6px;
+  cursor: nw-resize;
+}
+
+.resize-handle.ne {
+  top: -6px;
+  right: -6px;
+  cursor: ne-resize;
+}
+
+.resize-handle.sw {
+  bottom: -6px;
+  left: -6px;
+  cursor: sw-resize;
+}
+
+.resize-handle.se {
+  bottom: -6px;
+  right: -6px;
+  cursor: se-resize;
+}
+
+/* 边缘调整手柄 */
+.resize-handle.edge {
+  background: rgba(76, 175, 80, 0.6);
+  opacity: 0;
+  transition: all 0.2s ease;
+}
+
+.route-info-panel:hover .resize-handle.edge {
+  opacity: 1;
+}
+
+.resize-handle.edge:hover {
+  background: rgba(76, 175, 80, 0.8);
+}
+
+.resize-handle.n {
+  top: -3px;
+  left: 20px;
+  right: 20px;
+  height: 6px;
+  cursor: n-resize;
+  border-radius: 3px;
+}
+
+.resize-handle.s {
+  bottom: -3px;
+  left: 20px;
+  right: 20px;
+  height: 6px;
+  cursor: s-resize;
+  border-radius: 3px;
+}
+
+.resize-handle.w {
+  left: -3px;
+  top: 20px;
+  bottom: 20px;
+  width: 6px;
+  cursor: w-resize;
+  border-radius: 3px;
+}
+
+.resize-handle.e {
+  right: -3px;
+  top: 20px;
+  bottom: 20px;
+  width: 6px;
+  cursor: e-resize;
+  border-radius: 3px;
+}
+
 .panel-content {
-  padding: 20px;
-  max-height: calc(85vh - 80px);
+  padding: 24px;
+  height: calc(100% - 68px);
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* 路线基本信息 */
@@ -1166,17 +1574,45 @@ defineExpose({
 /* 响应式设计 */
 @media (max-width: 768px) {
   .route-info-panel {
-    width: calc(100vw - 20px);
-    left: 10px;
-    right: 10px;
+    min-width: 320px;
+    max-width: calc(100vw - 20px);
+  }
+  
+  .panel-header {
+    padding: 12px 16px;
+  }
+  
+  .panel-title {
+    font-size: 14px;
+  }
+  
+  .drag-handle {
+    width: 18px;
+    height: 18px;
+  }
+  
+  .control-btn {
+    padding: 6px;
+  }
+  
+  .control-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+  
+  .panel-content {
+    padding: 16px;
+    height: calc(100% - 56px);
   }
   
   .info-grid {
     grid-template-columns: 1fr;
+    gap: 8px;
   }
   
   .nav-stats {
     flex-direction: column;
+    gap: 8px;
   }
   
   .waypoint-item {
@@ -1200,13 +1636,39 @@ defineExpose({
   .distance-info {
     padding: 0 16px;
   }
+  
+  /* 移动端调整手柄优化 */
+  .resize-handle.corner {
+    width: 16px;
+    height: 16px;
+  }
+  
+  .resize-handle.edge {
+    opacity: 0.3;
+  }
+  
+  .route-info-panel:hover .resize-handle.edge {
+    opacity: 0.6;
+  }
 }
 
 @media (max-width: 480px) {
   .route-info-panel {
-    width: calc(100vw - 16px);
-    left: 8px;
-    right: 8px;
+    min-width: 280px;
+    max-width: calc(100vw - 16px);
+  }
+  
+  .panel-header {
+    padding: 10px 12px;
+  }
+  
+  .panel-title {
+    font-size: 13px;
+    gap: 8px;
+  }
+  
+  .panel-content {
+    padding: 12px;
   }
   
   .waypoint-name {
@@ -1220,6 +1682,16 @@ defineExpose({
   .distance-text {
     font-size: 10px;
     padding: 1px 6px;
+  }
+  
+  /* 超小屏幕调整手柄 */
+  .resize-handle.corner {
+    width: 20px;
+    height: 20px;
+  }
+  
+  .resize-handle.edge {
+    opacity: 0.5;
   }
 }
 </style>

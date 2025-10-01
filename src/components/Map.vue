@@ -25,13 +25,6 @@
       <span class="nav-text">导航</span>
     </div>
 
-    <!-- 轨迹回放切换按钮 - 左上角第三个 (隐藏但保留功能) -->
-    <div class="trajectory-toggle-button hidden-button" @click="toggleTrajectory" :title="showTrajectory ? '关闭轨迹回放' : '开启轨迹回放'">
-      <svg class="trajectory-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <polygon points="5,3 19,12 5,21"/>
-      </svg>
-      <span class="trajectory-text">轨迹</span>
-    </div>
     
     <!-- 地图样式选择器 - 右上角（仅在标准模式下显示） -->
     <div class="map-controls" v-show="mapMode === 'normal'">
@@ -69,19 +62,6 @@
       style="z-index: 2000;"
     />
 
-    <!-- 轨迹回放组件 -->
-    <TrajectoryPlayback
-      v-if="showTrajectory"
-      :map-instance="mapInstance"
-      :visible="showTrajectory"
-      @trajectory-loaded="handleTrajectoryLoaded"
-      @playback-started="handlePlaybackStarted"
-      @playback-paused="handlePlaybackPaused"
-      @playback-stopped="handlePlaybackStopped"
-      @playback-completed="handlePlaybackCompleted"
-      @map-reinitialization-needed="handleMapReinitializationNeeded"
-      ref="trajectoryPlaybackRef"
-    />
 
     <!-- 路线信息面板 -->
     <RouteInfoPanel
@@ -105,7 +85,6 @@ import { onMounted, onUnmounted, nextTick, ref, watch } from 'vue'
 import axios from 'axios'
 import AMapLoader from '@amap/amap-jsapi-loader'
 import CyclingNavigation from './CyclingNavigation.vue'
-import TrajectoryPlayback from './TrajectoryPlayback.vue'
 import RouteInfoPanel from './RouteInfoPanel.vue'
 import { useElevation } from '@/composables/useElevation'
 import simplifiedAnalytics from '@/utils/simplifiedAnalytics'
@@ -139,9 +118,6 @@ const showNavigation = ref(false)
 const cyclingNavigationRef = ref(null)
 // 导航组件是否已初始化（用于隐藏式导航计算）
 const navigationInitialized = ref(false)
-// 轨迹回放相关状态
-const showTrajectory = ref(false)
-const trajectoryPlaybackRef = ref(null)
 // 路线信息面板相关状态
 const showRouteInfo = ref(false)
 const routeInfoPanelRef = ref(null)
@@ -1983,251 +1959,7 @@ const clearNavigation = () => {
   }
 }
 
-// 切换轨迹回放显示
-const toggleTrajectory = () => {
-  showTrajectory.value = !showTrajectory.value
-  console.log('切换轨迹回放显示:', showTrajectory.value)
-}
 
-// 处理轨迹加载完成事件
-const handleTrajectoryLoaded = (data) => {
-  console.log('轨迹加载完成:', data)
-  
-  // 可以在这里添加额外的处理逻辑
-  // 比如调整地图视角、显示轨迹信息等
-}
-
-// 处理轨迹回放开始事件
-const handlePlaybackStarted = () => {
-  console.log('轨迹回放开始')
-  
-  // 可以在这里添加额外的处理逻辑
-  // 比如隐藏其他标记、调整地图交互等
-}
-
-// 处理轨迹回放暂停事件
-const handlePlaybackPaused = () => {
-  console.log('轨迹回放暂停')
-}
-
-// 处理轨迹回放停止事件
-const handlePlaybackStopped = () => {
-  console.log('轨迹回放停止')
-}
-
-// 处理轨迹回放完成事件
-const handlePlaybackCompleted = () => {
-  console.log('轨迹回放完成')
-  
-  // 可以在这里添加完成后的处理逻辑
-  // 比如显示完成提示、恢复地图状态等
-}
-
-// 处理地图重新初始化需求事件
-const handleMapReinitializationNeeded = async () => {
-  console.log('轨迹回放组件请求重新初始化地图')
-  
-  try {
-    // 保存当前地图状态
-    let savedCenter = null
-    let savedZoom = null
-    
-    if (mapInstance.value) {
-      try {
-        savedCenter = mapInstance.value.getCenter()
-        savedZoom = mapInstance.value.getZoom()
-        console.log('保存地图状态:', { center: savedCenter, zoom: savedZoom })
-      } catch (error) {
-        console.warn('无法保存地图状态:', error)
-      }
-    }
-    
-    // 重新初始化地图
-    await reinitializeMap()
-    
-    // 如果有保存的状态，尝试恢复
-    if (savedCenter && savedZoom && mapInstance.value) {
-      setTimeout(() => {
-        try {
-          mapInstance.value.setZoomAndCenter(savedZoom, savedCenter)
-          console.log('地图状态已恢复')
-        } catch (error) {
-          console.warn('恢复地图状态失败:', error)
-        }
-      }, 1000)
-    }
-    
-    console.log('地图重新初始化完成')
-  } catch (error) {
-    console.error('地图重新初始化失败:', error)
-  }
-}
-
-// 通过编程方式加载预设轨迹（供外部调用）
-const loadPresetTrajectory = (index) => {
-  if (trajectoryPlaybackRef.value) {
-    trajectoryPlaybackRef.value.setPresetTrajectory(index)
-    if (!showTrajectory.value) {
-      showTrajectory.value = true
-    }
-  }
-}
-
-// 通过编程方式加载自定义轨迹（供外部调用）
-const loadCustomTrajectory = (path) => {
-  if (trajectoryPlaybackRef.value) {
-    trajectoryPlaybackRef.value.setCustomTrajectory(path)
-    if (!showTrajectory.value) {
-      showTrajectory.value = true
-    }
-  }
-}
-
-// 设置并自动加载自定义轨迹（供外部调用）
-const setAndLoadCustomTrajectory = async (path) => {
-  if (trajectoryPlaybackRef.value) {
-    if (!showTrajectory.value) {
-      showTrajectory.value = true
-    }
-    await trajectoryPlaybackRef.value.setAndLoadCustomTrajectory(path)
-  } else {
-    console.warn('轨迹回放组件未准备就绪')
-  }
-}
-
-// 创建平滑轨迹路径（用于轨迹回放）
-const createSmoothTrajectoryPath = (trajectoryPath) => {
-  if (!trajectoryPath || trajectoryPath.length < 2) {
-    return []
-  }
-  
-  // 将轨迹点转换为带有经纬度属性的对象格式
-  const points = trajectoryPath.map(([lng, lat]) => ({
-    longitude: lng,
-    latitude: lat
-  }))
-  
-  // 复用现有的贝塞尔曲线构建逻辑
-  return buildBezierPath(points)
-}
-
-// 生成平滑的动画路径点（在原始点之间插值）
-const generateSmoothAnimationPath = (originalPath) => {
-  if (!originalPath || originalPath.length < 2) {
-    return originalPath
-  }
-  
-  const smoothPath = []
-  
-  // 在每两个原始点之间插入中间点
-  for (let i = 0; i < originalPath.length - 1; i++) {
-    const start = originalPath[i]
-    const end = originalPath[i + 1]
-    
-    // 添加起点
-    smoothPath.push(start)
-    
-    // 在两点之间插入中间点
-    const steps = 5 // 每段插入5个中间点
-    for (let j = 1; j < steps; j++) {
-      const t = j / steps
-      const interpolatedPoint = [
-        start[0] + (end[0] - start[0]) * t,
-        start[1] + (end[1] - start[1]) * t
-      ]
-      smoothPath.push(interpolatedPoint)
-    }
-  }
-  
-  // 添加最后一个点
-  smoothPath.push(originalPath[originalPath.length - 1])
-  
-  return smoothPath
-}
-
-// 直接播放轨迹动画（使用轨迹回放组件）
-const directTrajectoryPlayback = async (trajectoryPath, name = '轨迹回放') => {
-  console.log('=== Map.vue 直接轨迹回放 ===')
-  console.log('轨迹路径:', trajectoryPath)
-  console.log('轨迹名称:', name)
-  
-  if (!mapInstance.value) {
-    console.error('地图实例未准备就绪')
-    return
-  }
-  
-  try {
-    // 显示轨迹回放组件
-    if (!showTrajectory.value) {
-      showTrajectory.value = true
-      // 等待组件渲染
-      await nextTick()
-    }
-    
-    // 使用轨迹回放组件加载并开始轨迹
-    if (trajectoryPlaybackRef.value) {
-      const success = await trajectoryPlaybackRef.value.setAndLoadCustomTrajectory(trajectoryPath, name)
-      if (success) {
-        // 自动开始轨迹追踪
-        setTimeout(() => {
-          if (trajectoryPlaybackRef.value) {
-            trajectoryPlaybackRef.value.startAnimation()
-          }
-        }, 500)
-      }
-    } else {
-      console.error('轨迹回放组件引用不存在')
-    }
-    
-    console.log('直接轨迹回放设置完成')
-    
-  } catch (error) {
-    console.error('直接轨迹回放失败:', error)
-    throw error
-  }
-}
-
-// 清除直接轨迹回放
-const clearDirectTrajectoryPlayback = () => {
-  console.log('清除直接轨迹回放')
-  
-  // 停止并清除轨迹回放组件
-  if (trajectoryPlaybackRef.value) {
-    trajectoryPlaybackRef.value.stopAnimation()
-    trajectoryPlaybackRef.value.clearTrajectory()
-  }
-  
-  // 隐藏轨迹回放组件
-  showTrajectory.value = false
-}
-
-// 开始轨迹回放（供外部调用）
-const startTrajectoryPlayback = () => {
-  if (trajectoryPlaybackRef.value) {
-    trajectoryPlaybackRef.value.startAnimation()
-  }
-}
-
-// 暂停轨迹回放（供外部调用）
-const pauseTrajectoryPlayback = () => {
-  if (trajectoryPlaybackRef.value) {
-    trajectoryPlaybackRef.value.pauseAnimation()
-  }
-}
-
-// 停止轨迹回放（供外部调用）
-const stopTrajectoryPlayback = () => {
-  if (trajectoryPlaybackRef.value) {
-    trajectoryPlaybackRef.value.stopAnimation()
-  }
-}
-
-// 清除轨迹回放（供外部调用）
-const clearTrajectoryPlayback = () => {
-  if (trajectoryPlaybackRef.value) {
-    trajectoryPlaybackRef.value.clearTrajectory()
-  }
-}
 
 // 显示路线信息面板（供外部调用）
 const showRouteInfoPanel = async (routeData) => {
@@ -2289,17 +2021,6 @@ defineExpose({
   setNavigationWaypoints,
   startNavigation,
   clearNavigation,
-  // 轨迹回放相关方法
-  toggleTrajectory,
-  loadPresetTrajectory,
-  loadCustomTrajectory,
-  setAndLoadCustomTrajectory,
-  directTrajectoryPlayback,
-  clearDirectTrajectoryPlayback,
-  startTrajectoryPlayback,
-  pauseTrajectoryPlayback,
-  stopTrajectoryPlayback,
-  clearTrajectoryPlayback,
   // 路线信息面板相关方法
   showRouteInfoPanel,
   hideAllNavigationPanels
@@ -2380,43 +2101,21 @@ defineExpose({
   user-select: none;
 }
 
-/* 轨迹回放切换按钮 */
-.trajectory-toggle-button {
-  position: absolute;
-  top: 10px;
-  left: 150px; /* 位于导航按钮右侧 */
-  z-index: 100;
-  background: rgba(255, 255, 255, 0.95);
-  border: none;
-  border-radius: 8px;
-  padding: 12px;
-  cursor: pointer;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-  backdrop-filter: blur(10px);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.3s ease;
-  user-select: none;
-}
 
 .mode-toggle-button:hover,
-.navigation-toggle-button:hover,
-.trajectory-toggle-button:hover {
+.navigation-toggle-button:hover {
   background: rgba(64, 158, 255, 0.1);
   transform: translateY(-1px);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
 .mode-toggle-button:active,
-.navigation-toggle-button:active,
-.trajectory-toggle-button:active {
+.navigation-toggle-button:active {
   transform: translateY(0);
 }
 
 .mode-icon,
-.nav-icon,
-.trajectory-icon {
+.nav-icon {
   width: 20px;
   height: 20px;
   stroke-width: 2;
@@ -2425,14 +2124,12 @@ defineExpose({
 }
 
 .mode-toggle-button:hover .mode-icon,
-.navigation-toggle-button:hover .nav-icon,
-.trajectory-toggle-button:hover .trajectory-icon {
+.navigation-toggle-button:hover .nav-icon {
   color: #409eff;
 }
 
 .mode-text,
-.nav-text,
-.trajectory-text {
+.nav-text {
   font-size: 12px;
   font-weight: 600;
   color: #606266;
@@ -2440,8 +2137,7 @@ defineExpose({
 }
 
 .mode-toggle-button:hover .mode-text,
-.navigation-toggle-button:hover .nav-text,
-.trajectory-toggle-button:hover .trajectory-text {
+.navigation-toggle-button:hover .nav-text {
   color: #409eff;
 }
 
@@ -2586,24 +2282,14 @@ defineExpose({
     border-radius: 6px;
   }
 
-  /* 轨迹按钮移动端优化 */
-  .trajectory-toggle-button {
-    top: 5px;
-    left: 125px; /* 调整位置适应移动端 */
-    padding: 10px;
-    border-radius: 6px;
-  }
-  
   .mode-icon,
-  .nav-icon,
-  .trajectory-icon {
+  .nav-icon {
     width: 18px;
     height: 18px;
   }
   
   .mode-text,
-  .nav-text,
-  .trajectory-text {
+  .nav-text {
     font-size: 11px;
   }
   

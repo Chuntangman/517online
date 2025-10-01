@@ -33,7 +33,6 @@
             v-show="activeTab === '路线规划'"
             @route-generated="handleRouteGenerated"
             @route-selected="handleRouteSelected"
-            @trajectory-playback="handleTrajectoryPlayback"
             @route-navigate-with-markers="handleRouteNavigateWithMarkers"
             @clear-previous-displays="handleClearPreviousDisplays"
             @start-point-changed="handleStartPointChanged"
@@ -46,7 +45,6 @@
             @route-selected="handleRouteSelected"
             @route-visualize="handleRouteVisualize"
             @route-navigate-with-markers="handleRouteNavigateWithMarkers"
-            @trajectory-playback="handleTrajectoryPlayback"
             @clear-previous-displays="handleClearPreviousDisplays"
           />
 
@@ -350,48 +348,6 @@ const handleRouteNavigateWithMarkers = (routeData) => {
   }
 }
 
-// 处理轨迹回放
-const handleTrajectoryPlayback = (trajectoryData) => {
-  console.log('=== RouteMain 处理轨迹回放 ===')
-  console.log('接收到轨迹数据:', trajectoryData)
-  
-  if (!mapRef.value) {
-    console.error('地图引用未准备就绪')
-    return
-  }
-  
-  try {
-    // 首先清除之前的所有显示内容
-    console.log('轨迹回放前清除之前的显示内容...')
-    handleClearPreviousDisplays()
-    
-    const { trajectoryPath, name } = trajectoryData
-    
-    if (!trajectoryPath || trajectoryPath.length < 2) {
-      console.error('轨迹数据不足，无法进行回放。轨迹点数量:', trajectoryPath?.length || 0)
-      alert('轨迹数据不足，无法进行回放')
-      return
-    }
-    
-    console.log('开始轨迹回放，轨迹点数量:', trajectoryPath.length)
-    console.log('轨迹名称:', name)
-    console.log('轨迹路径详情:', trajectoryPath)
-    
-    // 直接调用地图的轨迹回放方法，不显示控制面板
-    if (mapRef.value.directTrajectoryPlayback) {
-      mapRef.value.directTrajectoryPlayback(trajectoryPath, name)
-    } else {
-      console.error('directTrajectoryPlayback 方法不存在')
-      alert('轨迹回放功能不可用')
-    }
-    
-    console.log('轨迹回放启动流程完成')
-    
-  } catch (error) {
-    console.error('轨迹回放失败:', error)
-    alert('轨迹回放失败: ' + error.message)
-  }
-}
 
 // 处理清除之前的显示内容
 const handleClearPreviousDisplays = () => {
@@ -403,11 +359,6 @@ const handleClearPreviousDisplays = () => {
   }
   
   try {
-    // 清除轨迹回放
-    if (mapRef.value.clearDirectTrajectoryPlayback) {
-      mapRef.value.clearDirectTrajectoryPlayback()
-      console.log('已清除轨迹回放')
-    }
     
     // 清除路线曲线
     if (mapRef.value.clearRouteCurve) {
@@ -617,22 +568,6 @@ defineExpose({
   backdrop-filter: blur(4px);
 }
 
-/* 确保轨迹回放组件在容器内正确显示 */
-.map-container :deep(.trajectory-playback) {
-  z-index: 1500 !important;
-}
-
-.map-container :deep(.demo-title) {
-  z-index: 1600 !important;
-}
-
-.map-container :deep(.main-control) {
-  z-index: 1600 !important;
-}
-
-.map-container :deep(.speed-selector-bottom) {
-  z-index: 1600 !important;
-}
 
 /* 天气组件容器 */
 .weather-container {

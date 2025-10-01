@@ -126,16 +126,6 @@
             在地图上查看路线
           </button>
           <button 
-            class="action-button trajectory-playback" 
-            @click="startTrajectoryPlayback"
-            :disabled="!canPlayTrajectory"
-          >
-            <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <polygon points="5,3 19,12 5,21"/>
-            </svg>
-            轨迹回放
-          </button>
-          <button 
             class="action-button close-modal" 
             @click="closeModal"
           >
@@ -179,7 +169,7 @@ const props = defineProps({
 })
 
 // Emits
-const emit = defineEmits(['close', 'route-selected', 'trajectory-playback', 'route-navigate-with-markers', 'clear-previous-displays'])
+const emit = defineEmits(['close', 'route-selected', 'route-navigate-with-markers', 'clear-previous-displays'])
 
 // 状态管理
 const waypoints = ref([])
@@ -204,23 +194,6 @@ const canShowOnMap = computed(() => {
   return hasValidWaypoints
 })
 
-// 检查是否可以进行轨迹回放
-const canPlayTrajectory = computed(() => {
-  if (!waypoints.value || waypoints.value.length < 2) {
-    return false
-  }
-  
-  // 检查是否有足够的有效经纬度点
-  const validPoints = waypoints.value.filter(wp => {
-    const hasLng = wp.longitude !== null && wp.longitude !== undefined && wp.longitude !== '';
-    const hasLat = wp.latitude !== null && wp.latitude !== undefined && wp.latitude !== '';
-    const validLng = hasLng && !isNaN(parseFloat(wp.longitude));
-    const validLat = hasLat && !isNaN(parseFloat(wp.latitude));
-    return validLng && validLat;
-  })
-  
-  return validPoints.length >= 2
-})
 
 // 获取途径点详情
 const fetchWaypoints = async () => {
@@ -344,48 +317,6 @@ const viewRouteOnMap = async () => {
   closeModal()
 }
 
-// 开始轨迹回放
-const startTrajectoryPlayback = async () => {
-  if (!canPlayTrajectory.value) {
-    alert('轨迹回放失败：有效途径点不足（需要至少2个点）')
-    return
-  }
-  
-  // 提取有效的轨迹点
-  const validWaypoints = waypoints.value.filter(wp => {
-    const hasLng = wp.longitude !== null && wp.longitude !== undefined && wp.longitude !== '';
-    const hasLat = wp.latitude !== null && wp.latitude !== undefined && wp.latitude !== '';
-    const validLng = hasLng && !isNaN(parseFloat(wp.longitude));
-    const validLat = hasLat && !isNaN(parseFloat(wp.latitude));
-    return validLng && validLat;
-  })
-  
-  // 转换为轨迹回放需要的格式
-  const trajectoryPath = validWaypoints.map(wp => {
-    const lng = parseFloat(wp.longitude);
-    const lat = parseFloat(wp.latitude);
-    return [lng, lat];
-  })
-  
-  // 发射轨迹回放事件
-  const trajectoryData = {
-    route: props.route,
-    waypoints: waypoints.value,
-    trajectoryPath: trajectoryPath,
-    name: props.route?.name || '智能匹配路线轨迹',
-    source: 'smart_match'
-  }
-  
-  // 记录轨迹回放使用
-  try {
-    await simplifiedAnalytics.trackTrajectoryPlayback(trajectoryData)
-  } catch (error) {
-    console.warn('记录轨迹回放失败:', error)
-  }
-  
-  emit('trajectory-playback', trajectoryData)
-  closeModal()
-}
 
 // 组件挂载时获取途径点
 onMounted(() => {
@@ -757,26 +688,6 @@ onMounted(() => {
   cursor: not-allowed;
 }
 
-.action-button.trajectory-playback {
-  background: #ff6b6b;
-  color: white;
-}
-
-.action-button.trajectory-playback:hover:not(:disabled) {
-  background: #ee5a52;
-  transform: translateY(-1px);
-}
-
-.action-button.trajectory-playback:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
-
-.action-icon {
-  width: 16px;
-  height: 16px;
-  stroke-width: 2;
-}
 
 .action-button.close-modal {
   background: #6c757d;
