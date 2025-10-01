@@ -213,7 +213,9 @@
         <div v-if="routeInfo" class="route-info">
           <div class="info-header">
             <h4>路线信息</h4>
-            <span class="route-status success">规划成功</span>
+            <span class="route-status success">
+              {{ routeInfo.isSegmentNavigation ? '分段规划成功' : '规划成功' }}
+            </span>
           </div>
           <div class="info-content">
             <div class="info-item">
@@ -227,6 +229,30 @@
             <div class="info-item">
               <span class="info-label">路线策略:</span>
               <span class="info-value">{{ getPolicyName(routePolicy) }}</span>
+            </div>
+            <div v-if="routeInfo.isSegmentNavigation && routeInfo.segmentInfo" class="info-item">
+              <span class="info-label">路线段数:</span>
+              <span class="info-value segment-count">{{ routeInfo.segmentInfo.totalSegments }}段</span>
+            </div>
+          </div>
+          
+          <!-- 分段信息详情 -->
+          <div v-if="routeInfo.isSegmentNavigation && routeInfo.segmentInfo" class="segment-details">
+            <h5>🛣️ 分段详情</h5>
+            <div class="segment-list">
+              <div 
+                v-for="(segment, index) in routeInfo.segmentInfo.segments" 
+                :key="index"
+                class="segment-item"
+              >
+                <div class="segment-header">
+                  <span class="segment-number">第{{ index + 1 }}段</span>
+                  <div class="segment-stats">
+                    <span class="segment-distance">{{ formatDistance(segment.distance) }}</span>
+                    <span class="segment-time">{{ formatTime(segment.time) }}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           
@@ -276,6 +302,23 @@
               </svg>
               <span>正在获取高程数据...</span>
             </div>
+          </div>
+        </div>
+
+        <!-- 分段导航进度显示 -->
+        <div v-if="isSegmentSearching" class="segment-progress">
+          <div class="progress-header">
+            <h5>分段导航规划中</h5>
+            <span class="progress-text">{{ segmentProgress.current }}/{{ segmentProgress.total }}</span>
+          </div>
+          <div class="progress-bar">
+            <div 
+              class="progress-fill" 
+              :style="{ width: segmentProgress.total > 0 ? (segmentProgress.current / segmentProgress.total * 100) + '%' : '0%' }"
+            ></div>
+          </div>
+          <div class="progress-hint">
+            <span class="hint-text">🚴‍♂️ 正在规划第{{ segmentProgress.current }}段路线，请稍候...</span>
           </div>
         </div>
 
@@ -378,6 +421,12 @@ const errorMessage = ref('')
 // 途径点数据
 const waypointsData = ref([])
 
+// 分段导航相关数据
+const segmentRoutes = ref([]) // 存储每段路线结果
+const segmentCache = ref(new Map()) // 缓存已计算的路段
+const isSegmentSearching = ref(false) // 分段搜索状态
+const segmentProgress = ref({ current: 0, total: 0 }) // 分段搜索进度
+
 // 高程数据相关
 const { 
   isLoading: elevationLoading, 
@@ -392,9 +441,8 @@ const showElevationData = ref(false)
 
 // 高德地图骑行导航实例
 const ridingInstance = ref(null)
-const routePolyline = ref(null)
-const startMarker = ref(null)
-const endMarker = ref(null)
+const routePolylines = ref([]) // 改为数组存储多段路线
+const waypointMarkers = ref([]) // 存储途径点标记
 
 // 计算属性
 const canSearch = computed(() => {
@@ -485,7 +533,48 @@ const initRiding = () => {
   }
 }
 
-// 搜索路线
+// 生成缓存键
+const generateCacheKey = (point1, point2, policy) => {
+  const p1 = Array.isArray(point1) ? point1.join(',') : `${point1.keyword}-${point1.city}`
+  const p2 = Array.isArray(point2) ? point2.join(',') : `${point2.keyword}-${point2.city}`
+  return `${p1}_${p2}_${policy}`
+}
+
+// 分段导航搜索
+const searchSegmentRoute = (startPoint, endPoint, policy) => {
+  return new Promise((resolve, reject) => {
+    const cacheKey = generateCacheKey(startPoint, endPoint, policy)
+    
+    // 检查缓存
+    if (segmentCache.value.has(cacheKey)) {
+      console.log('使用缓存的路段结果:', cacheKey)
+      resolve(segmentCache.value.get(cacheKey))
+      return
+    }
+    
+    // 创建临时导航实例进行搜索
+    const tempRiding = new AMap.Riding({
+      policy: parseInt(policy),
+      hideMarkers: true,
+      isOutline: true,
+      outlineColor: '#ffffff',
+      autoFitView: false
+    })
+    
+    tempRiding.search(startPoint, endPoint, (status, result) => {
+      if (status === 'complete' && result.routes && result.routes.length > 0) {
+        const routeData = result.routes[0]
+        // 缓存结果
+        segmentCache.value.set(cacheKey, routeData)
+        resolve(routeData)
+      } else {
+        reject(new Error(`路段导航失败: ${JSON.stringify(result)}`))
+      }
+    })
+  })
+}
+
+// 搜索路线（支持途径点分段导航）
 const searchRoute = async () => {
   if (!ridingInstance.value) {
     initRiding()
@@ -499,91 +588,108 @@ const searchRoute = async () => {
   clearError()
   
   try {
-    let startPoint, endPoint, waypoints = []
-
+    let allPoints = [] // 包含起点、途径点、终点的完整点列表
+    
     if (searchMode.value === 'coordinates') {
       // 经纬度模式
-      startPoint = [parseFloat(startCoordinates.value.lng), parseFloat(startCoordinates.value.lat)]
-      endPoint = [parseFloat(endCoordinates.value.lng), parseFloat(endCoordinates.value.lat)]
+      const startPoint = [parseFloat(startCoordinates.value.lng), parseFloat(startCoordinates.value.lat)]
+      const endPoint = [parseFloat(endCoordinates.value.lng), parseFloat(endCoordinates.value.lat)]
+      
+      allPoints.push(startPoint)
       
       // 处理途径点（经纬度格式）
       if (waypointsData.value && waypointsData.value.length > 0) {
-        console.log('处理经纬度模式途径点:', waypointsData.value)
-        waypoints = waypointsData.value
-          .filter(wp => {
+        console.log('🔍 处理经纬度模式途径点:', waypointsData.value)
+        console.log('🔍 waypointsData长度:', waypointsData.value.length)
+        
+        // ⚠️ 注意：waypointsData 已经是由RouteMain过滤后的中间途径点，不包含起点和终点
+        // 所以这里不需要再次slice，直接使用所有数据
+        console.log('🎯 处理所有途径点（已过滤起终点）:', waypointsData.value)
+        
+        const validWaypoints = waypointsData.value
+          .filter((wp, index) => {
             const hasCoords = wp && wp.longitude && wp.latitude && 
                            !isNaN(parseFloat(wp.longitude)) && !isNaN(parseFloat(wp.latitude))
-            console.log(`途径点 ${wp?.name} 坐标验证:`, { 
-              wp, hasCoords, 
-              lng: wp?.longitude, 
-              lat: wp?.latitude 
-            })
+            console.log(`途径点${index + 1}验证:`, { wp, hasCoords })
             return hasCoords
           })
-          .map(wp => {
+          .map((wp, index) => {
             const coords = [parseFloat(wp.longitude), parseFloat(wp.latitude)]
-            console.log(`途径点 ${wp?.name || wp?.id || 'unknown'} 坐标:`, coords)
+            console.log(`途径点${index + 1}坐标:`, coords)
             return coords
           })
-        console.log('最终经纬度途径点:', waypoints)
+        
+        allPoints.push(...validWaypoints)
+        console.log('✅ 有效途径点坐标:', validWaypoints)
+        console.log('📍 当前allPoints:', allPoints)
       }
+      
+      allPoints.push(endPoint)
     } else {
       // 地点名称模式
-      startPoint = {
+      const startPoint = {
         keyword: startKeyword.value.trim(),
         city: startCity.value.trim() || '北京'
       }
-      endPoint = {
+      const endPoint = {
         keyword: endKeyword.value.trim(),
         city: endCity.value.trim() || '北京'
       }
       
+      allPoints.push(startPoint)
+      
       // 处理途径点（关键字格式）
       if (waypointsData.value && waypointsData.value.length > 0) {
-        console.log('处理关键字模式途径点:', waypointsData.value)
-        waypoints = waypointsData.value
-          .filter(wp => {
+        console.log('🔍 处理关键字模式途径点:', waypointsData.value)
+        console.log('🔍 waypointsData长度:', waypointsData.value.length)
+        
+        // ⚠️ 注意：waypointsData 已经是由RouteMain过滤后的中间途径点，不包含起点和终点
+        // 所以这里不需要再次slice，直接使用所有数据
+        console.log('🎯 处理所有途径点（已过滤起终点）:', waypointsData.value)
+        
+        const validWaypoints = waypointsData.value
+          .filter((wp, index) => {
             const hasName = wp && wp.name && typeof wp.name === 'string' && wp.name.trim()
-            console.log(`途径点 ${wp?.name} 验证:`, { wp, hasName })
+            console.log(`途径点${index + 1}验证:`, { wp, hasName })
             return hasName
           })
-          .map(wp => {
-            const result = {
+          .map((wp, index) => {
+            const waypoint = {
               keyword: wp.name.trim(),
               city: (wp.region && wp.region.trim()) || '北京'
             }
-            console.log(`途径点映射结果:`, result)
-            return result
+            console.log(`途径点${index + 1}关键字:`, waypoint)
+            return waypoint
           })
-        console.log('最终关键字途径点:', waypoints)
+        
+        allPoints.push(...validWaypoints)
+        console.log('✅ 有效途径点关键字:', validWaypoints)
+        console.log('📍 当前allPoints:', allPoints)
       }
+      
+      allPoints.push(endPoint)
     }
 
-    // 更新路线策略
-    ridingInstance.value.setPolicy(parseInt(routePolicy.value))
+    console.log('完整点列表:', allPoints)
 
-    // 执行路线搜索 - 暂时跳过途径点功能，先确保基础功能正常
-    if (waypoints.length > 0) {
-      console.log('检测到途径点，但暂时跳过途径点功能，使用起终点直达')
-      console.log('途径点数据:', waypoints)
-      errorMessage.value = '注意：当前版本暂时跳过途径点功能，已规划起终点直达路线'
+    // 如果只有起点和终点，使用传统方式
+    if (allPoints.length === 2) {
+      console.log('只有起终点，使用传统导航')
+      ridingInstance.value.setPolicy(parseInt(routePolicy.value))
+      ridingInstance.value.search(allPoints[0], allPoints[1], (status, result) => {
+        isSearching.value = false
+        if (status === 'complete' && result.routes && result.routes.length > 0) {
+          handleRouteSuccess(result)
+        } else {
+          handleRouteError(result)
+        }
+      })
+      return
     }
-    
-    // 使用基础的起终点搜索
-    console.log('使用基础起终点搜索')
-    console.log('起点:', startPoint)
-    console.log('终点:', endPoint)
-    console.log('搜索模式:', searchMode.value)
-    
-    ridingInstance.value.search(startPoint, endPoint, (status, result) => {
-      isSearching.value = false
-      console.log('基础搜索结果:', { status, result })
-      if (status === 'complete' && result.routes && result.routes.length > 0) {
-        handleRouteSuccess(result)
-      } else {
-        handleRouteError(result)
-      }
-    })
+
+    // 有途径点，使用分段导航
+    console.log('检测到途径点，开始分段导航规划')
+    await searchWithWaypoints(allPoints)
 
   } catch (error) {
     isSearching.value = false
@@ -592,21 +698,142 @@ const searchRoute = async () => {
   }
 }
 
+// 分段导航主方法
+const searchWithWaypoints = async (allPoints) => {
+  try {
+    isSegmentSearching.value = true
+    segmentRoutes.value = []
+    
+    const segments = allPoints.length - 1
+    segmentProgress.value = { current: 0, total: segments }
+    
+    console.log(`开始分段导航，共${segments}段`)
+    
+    // 逐段搜索路线
+    for (let i = 0; i < segments; i++) {
+      const startPoint = allPoints[i]
+      const endPoint = allPoints[i + 1]
+      
+      console.log(`搜索第${i + 1}段: `, { startPoint, endPoint })
+      segmentProgress.value.current = i + 1
+      
+      try {
+        const segmentRoute = await searchSegmentRoute(startPoint, endPoint, routePolicy.value)
+        segmentRoutes.value.push({
+          index: i,
+          startPoint,
+          endPoint,
+          route: segmentRoute
+        })
+        console.log(`第${i + 1}段搜索成功`)
+      } catch (error) {
+        console.error(`第${i + 1}段搜索失败:`, error)
+        throw new Error(`第${i + 1}段路线规划失败: ${error.message}`)
+      }
+    }
+    
+    // 合并所有路段结果
+    const mergedResult = mergeSegmentRoutes(segmentRoutes.value)
+    console.log('分段导航完成，合并结果:', mergedResult)
+    
+    // 处理合并后的结果
+    handleRouteSuccess(mergedResult, true) // 第二个参数表示这是分段导航结果
+    
+  } catch (error) {
+    console.error('分段导航失败:', error)
+    errorMessage.value = error.message || '分段导航失败'
+  } finally {
+    isSearching.value = false
+    isSegmentSearching.value = false
+    segmentProgress.value = { current: 0, total: 0 }
+  }
+}
+
+// 合并路段结果
+const mergeSegmentRoutes = (segments) => {
+  if (segments.length === 0) {
+    throw new Error('没有有效的路段数据')
+  }
+  
+  let totalDistance = 0
+  let totalTime = 0
+  let allRides = []
+  let allPath = []
+  
+  segments.forEach((segment, index) => {
+    const route = segment.route
+    totalDistance += route.distance || 0
+    totalTime += route.time || 0
+    
+    if (route.rides && route.rides.length > 0) {
+      // 为每个路段的rides添加段索引信息
+      const segmentRides = route.rides.map(ride => ({
+        ...ride,
+        segmentIndex: index,
+        segmentName: `第${index + 1}段`
+      }))
+      allRides.push(...segmentRides)
+    }
+    
+    // 合并路径，避免重复点
+    if (route.rides && route.rides.length > 0) {
+      route.rides.forEach(ride => {
+        if (ride.path && ride.path.length > 0) {
+          // 如果不是第一段，跳过第一个点避免重复
+          const pathToAdd = index === 0 ? ride.path : ride.path.slice(1)
+          allPath.push(...pathToAdd)
+        }
+      })
+    }
+  })
+  
+  // 构造合并后的结果
+  const mergedRoute = {
+    distance: totalDistance,
+    time: totalTime,
+    rides: allRides,
+    path: allPath,
+    // 添加分段信息
+    segmentInfo: {
+      totalSegments: segments.length,
+      segments: segments.map(seg => ({
+        index: seg.index,
+        distance: seg.route.distance,
+        time: seg.route.time,
+        ridesCount: seg.route.rides?.length || 0
+      }))
+    }
+  }
+  
+  return {
+    info: '分段导航规划成功',
+    routes: [mergedRoute],
+    origin: segments[0].route.origin || null,
+    destination: segments[segments.length - 1].route.destination || null
+  }
+}
+
 // 处理路线搜索成功
-const handleRouteSuccess = async (result) => {
+const handleRouteSuccess = async (result, isSegmentNavigation = false) => {
   const route = result.routes[0]
   
   // 保存路线信息
   routeInfo.value = {
     distance: route.distance,
-    time: route.time
+    time: route.time,
+    isSegmentNavigation,
+    segmentInfo: route.segmentInfo || null
   }
 
   // 解析路线步骤
   routeSteps.value = parseRouteSteps(route)
   
-  // 绘制路线
-  drawRoute(route)
+  // 绘制路线（支持分段）
+  if (isSegmentNavigation) {
+    drawSegmentRoutes(route)
+  } else {
+    drawRoute(route)
+  }
   
   // 获取高程数据
   await fetchElevationData(route)
@@ -628,7 +855,9 @@ const handleRouteSuccess = async (result) => {
       search_mode: searchMode.value,
       distance: formatDistance(route.distance),
       duration: formatTime(route.time),
-      smart_sampling_enabled: enableSmartSampling.value
+      smart_sampling_enabled: enableSmartSampling.value,
+      is_segment_navigation: isSegmentNavigation,
+      segment_count: route.segmentInfo?.totalSegments || 0
     })
   } catch (error) {
     console.warn('记录导航行为失败:', error)
@@ -640,12 +869,17 @@ const handleRouteSuccess = async (result) => {
     info: routeInfo.value,
     steps: routeSteps.value,
     elevationStats: elevationStats.value,
-    elevationData: elevationData.value // 添加原始高程数据
+    elevationData: elevationData.value, // 添加原始高程数据
+    isSegmentNavigation,
+    segmentRoutes: isSegmentNavigation ? segmentRoutes.value : null
   })
 
   console.log('路线规划成功:', routeInfo.value)
   if (elevationStats.value) {
     console.log('高程统计:', elevationStats.value)
+  }
+  if (isSegmentNavigation) {
+    console.log('分段导航信息:', route.segmentInfo)
   }
 }
 
@@ -767,7 +1001,144 @@ const parseRouteSteps = (route) => {
   return steps
 }
 
-// 绘制路线
+// 绘制分段路线
+const drawSegmentRoutes = (route) => {
+  if (!props.mapInstance) return
+
+  // 清除现有路线
+  clearRouteDisplay()
+
+  try {
+    // 解析路线路径
+    const path = parseRouteToPath(route)
+    
+    if (path.length === 0) {
+      console.warn('路线路径为空')
+      return
+    }
+
+    // 创建途径点标记（包括起点和终点）
+    console.log('🎯 开始绘制途径点标记')
+    console.log('waypointsData:', waypointsData.value)
+    console.log('waypointsData长度:', waypointsData.value?.length)
+    
+    if (waypointsData.value && waypointsData.value.length > 0) {
+      // 添加起点标记（真正的起点是路线的第一个坐标点）
+      if (path.length > 0) {
+        console.log('📍 添加起点标记:', path[0])
+        const startMarker = new AMap.Marker({
+          position: path[0], // 使用路线的第一个坐标点作为起点
+          icon: 'https://webapi.amap.com/theme/v1.3/markers/n/start.png',
+          anchor: 'bottom-center',
+          map: props.mapInstance,
+          title: '起点' // waypointsData现在不包含起点信息
+        })
+        waypointMarkers.value.push(startMarker)
+      }
+
+      // 添加中间途径点标记（序号从1开始：起点-1-2-3-终点）
+      console.log('🔢 开始添加中间途径点标记')
+      // ⚠️ 注意：waypointsData 现在只包含中间途径点，不包含起点和终点
+      for (let i = 0; i < waypointsData.value.length; i++) {
+        const waypoint = waypointsData.value[i]
+        console.log(`处理途径点 ${i + 1}:`, waypoint)
+        
+        if (waypoint && waypoint.longitude && waypoint.latitude) {
+          // 途径点序号：第1个途径点标记为1，第2个标记为2，以此类推
+          const markerNumber = i + 1 // 从1开始编号
+          const position = [parseFloat(waypoint.longitude), parseFloat(waypoint.latitude)]
+          
+          console.log(`✅ 创建途径点${markerNumber}标记:`, {
+            position,
+            name: waypoint.name,
+            coordinates: `${waypoint.longitude}, ${waypoint.latitude}`
+          })
+          
+          const marker = new AMap.Marker({
+            position: position,
+            icon: `https://webapi.amap.com/theme/v1.3/markers/n/mark_b${markerNumber}.png`,
+            anchor: 'bottom-center',
+            map: props.mapInstance,
+            title: waypoint.name || `途径点${markerNumber}`
+          })
+          waypointMarkers.value.push(marker)
+        } else {
+          console.warn(`❌ 途径点${i + 1}缺少坐标信息:`, waypoint)
+        }
+      }
+
+      // 添加终点标记（真正的终点是路线的最后一个坐标点）
+      if (path.length > 0) {
+        console.log('🏁 添加终点标记:', path[path.length - 1])
+        const endMarker = new AMap.Marker({
+          position: path[path.length - 1], // 使用路线的最后一个坐标点作为终点
+          icon: 'https://webapi.amap.com/theme/v1.3/markers/n/end.png',
+          anchor: 'bottom-center',
+          map: props.mapInstance,
+          title: '终点' // waypointsData现在不包含终点信息
+        })
+        waypointMarkers.value.push(endMarker)
+      }
+      
+      console.log(`📊 标记创建完成，共创建 ${waypointMarkers.value.length} 个标记`)
+    } else {
+      console.warn('⚠️ 没有途径点数据或数据为空')
+    }
+
+    // 创建分段路线折线（不同颜色）
+    const segmentColors = ['#1890ff', '#52c41a', '#fa8c16', '#eb2f96', '#722ed1', '#13c2c2']
+    
+    if (route.segmentInfo && segmentRoutes.value.length > 0) {
+      segmentRoutes.value.forEach((segment, index) => {
+        const segmentPath = parseRouteToPath(segment.route)
+        if (segmentPath.length > 0) {
+          const polyline = new AMap.Polyline({
+            path: segmentPath,
+            isOutline: true,
+            outlineColor: '#ffffff',
+            borderWeight: 2,
+            strokeWeight: 6,
+            strokeColor: segmentColors[index % segmentColors.length],
+            strokeOpacity: 0.9,
+            lineJoin: 'round',
+            lineCap: 'round'
+          })
+          
+          props.mapInstance.add(polyline)
+          routePolylines.value.push(polyline)
+        }
+      })
+    } else {
+      // 如果没有分段信息，绘制整条路线
+      const polyline = new AMap.Polyline({
+        path: path,
+        isOutline: true,
+        outlineColor: '#ffffff',
+        borderWeight: 2,
+        strokeWeight: 6,
+        strokeColor: '#1890ff',
+        strokeOpacity: 0.9,
+        lineJoin: 'round',
+        lineCap: 'round'
+      })
+      
+      props.mapInstance.add(polyline)
+      routePolylines.value.push(polyline)
+    }
+
+    // 调整地图视野
+    const allMarkers = [...waypointMarkers.value, ...routePolylines.value]
+    if (allMarkers.length > 0) {
+      props.mapInstance.setFitView(allMarkers, false, [20, 20, 20, 20])
+    }
+
+  } catch (error) {
+    console.error('绘制分段路线失败:', error)
+    errorMessage.value = '路线绘制失败'
+  }
+}
+
+// 绘制路线（传统方式）
 const drawRoute = (route) => {
   if (!props.mapInstance) return
 
@@ -784,23 +1155,25 @@ const drawRoute = (route) => {
     }
 
     // 创建起点标记
-    startMarker.value = new AMap.Marker({
+    const startMarker = new AMap.Marker({
       position: path[0],
       icon: 'https://webapi.amap.com/theme/v1.3/markers/n/start.png',
       anchor: 'bottom-center',
       map: props.mapInstance
     })
+    waypointMarkers.value.push(startMarker)
 
     // 创建终点标记
-    endMarker.value = new AMap.Marker({
+    const endMarker = new AMap.Marker({
       position: path[path.length - 1],
       icon: 'https://webapi.amap.com/theme/v1.3/markers/n/end.png',
       anchor: 'bottom-center',
       map: props.mapInstance
     })
+    waypointMarkers.value.push(endMarker)
 
     // 创建路线折线
-    routePolyline.value = new AMap.Polyline({
+    const polyline = new AMap.Polyline({
       path: path,
       isOutline: true,
       outlineColor: '#ffffff',
@@ -813,10 +1186,11 @@ const drawRoute = (route) => {
     })
 
     // 添加到地图
-    props.mapInstance.add(routePolyline.value)
+    props.mapInstance.add(polyline)
+    routePolylines.value.push(polyline)
 
     // 调整地图视野
-    props.mapInstance.setFitView([startMarker.value, endMarker.value, routePolyline.value], false, [20, 20, 20, 20])
+    props.mapInstance.setFitView([...waypointMarkers.value, ...routePolylines.value], false, [20, 20, 20, 20])
 
   } catch (error) {
     console.error('绘制路线失败:', error)
@@ -843,20 +1217,21 @@ const parseRouteToPath = (route) => {
 
 // 清除路线显示
 const clearRouteDisplay = () => {
-  if (routePolyline.value) {
-    props.mapInstance.remove(routePolyline.value)
-    routePolyline.value = null
-  }
+  // 清除所有路线折线
+  routePolylines.value.forEach(polyline => {
+    if (polyline && props.mapInstance) {
+      props.mapInstance.remove(polyline)
+    }
+  })
+  routePolylines.value = []
   
-  if (startMarker.value) {
-    startMarker.value.setMap(null)
-    startMarker.value = null
-  }
-  
-  if (endMarker.value) {
-    endMarker.value.setMap(null)
-    endMarker.value = null
-  }
+  // 清除所有标记
+  waypointMarkers.value.forEach(marker => {
+    if (marker) {
+      marker.setMap(null)
+    }
+  })
+  waypointMarkers.value = []
 }
 
 // 清除路线
@@ -869,6 +1244,12 @@ const clearRoute = () => {
   hasActiveRoute.value = false
   isStepsCollapsed.value = true
   waypointsData.value = [] // 清除途径点数据
+  
+  // 清除分段导航数据
+  segmentRoutes.value = []
+  segmentCache.value.clear()
+  isSegmentSearching.value = false
+  segmentProgress.value = { current: 0, total: 0 }
   
   // 清除高程数据
   clearElevationData()
@@ -1379,6 +1760,81 @@ defineExpose({
   font-weight: 600;
 }
 
+.info-value.segment-count {
+  color: #4CAF50;
+  background: rgba(76, 175, 80, 0.1);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+/* 分段详情样式 */
+.segment-details {
+  margin-top: 16px;
+  padding: 12px;
+  background: linear-gradient(135deg, #f0f8ff 0%, #f8f9fa 100%);
+  border-radius: 8px;
+  border: 1px solid #bbdefb;
+}
+
+.segment-details h5 {
+  margin: 0 0 12px 0;
+  color: #2c3e50;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.segment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.segment-item {
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 6px;
+  border: 1px solid rgba(33, 150, 243, 0.2);
+  transition: all 0.2s ease;
+}
+
+.segment-item:hover {
+  background: rgba(33, 150, 243, 0.05);
+  border-color: rgba(33, 150, 243, 0.3);
+}
+
+.segment-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.segment-number {
+  font-size: 12px;
+  color: #2196F3;
+  font-weight: 600;
+  background: rgba(33, 150, 243, 0.1);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.segment-stats {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: #666;
+}
+
+.segment-distance,
+.segment-time {
+  background: #f8f9fa;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
 .error-message {
   margin-top: 20px;
   padding: 16px;
@@ -1512,6 +1968,89 @@ defineExpose({
   width: 16px;
   height: 16px;
   animation: spin 1s linear infinite;
+}
+
+/* 分段导航进度样式 */
+.segment-progress {
+  margin-top: 20px;
+  padding: 16px;
+  background: linear-gradient(135deg, #e8f5e9 0%, #f8f9fa 100%);
+  border-radius: 8px;
+  border: 1px solid #c8e6c9;
+  border-left: 4px solid #4CAF50;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.progress-header h5 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #4CAF50;
+  font-weight: 600;
+  background: rgba(76, 175, 80, 0.1);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e9ecef;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4CAF50, #45a049);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  position: relative;
+}
+
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.progress-hint {
+  padding: 8px 12px;
+  background: rgba(76, 175, 80, 0.05);
+  border-radius: 6px;
+  border-left: 3px solid #4CAF50;
+}
+
+.progress-hint .hint-text {
+  font-size: 12px;
+  color: #2c3e50;
+  line-height: 1.4;
+  display: block;
 }
 
 .route-steps {

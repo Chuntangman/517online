@@ -89,18 +89,6 @@
       <div v-if="navigationInfo" class="navigation-info">
         <h4>导航信息</h4>
         
-        <!-- 路线策略选择器 -->
-        <div class="policy-selector">
-          <label class="policy-label">路线策略:</label>
-          <select v-model="selectedPolicy" class="policy-select" @change="onPolicyChange">
-            <option value="0">推荐路线及最快路线综合</option>
-            <option value="1">推荐路线 (平衡距离与路况)</option>
-            <option value="2">最快路线 (优先速度)</option>
-          </select>
-          <div class="policy-description">
-            <span class="description-text">{{ getPolicyDescription(selectedPolicy) }}</span>
-          </div>
-        </div>
         
         <div class="nav-stats">
           <div class="nav-stat-item success">
@@ -200,7 +188,7 @@
         <div class="waypoints-list">
           <!-- 起点 -->
           <div v-if="routeData.waypoints[0]" class="waypoint-container">
-            <div class="waypoint-item start">
+            <div class="waypoint-item start" @click="handleWaypointClick(0)">
               <span class="waypoint-label">起</span>
               <div class="waypoint-details">
                 <div class="waypoint-name">{{ routeData.waypoints[0].name || '起点' }}</div>
@@ -221,6 +209,18 @@
                   </svg>
                   <span>停留时间: {{ routeData.waypoints[0].estimated_time }}</span>
                 </div>
+              </div>
+              <!-- 导航按钮 -->
+              <div v-if="routeData.waypoints.length > 1" class="waypoint-actions">
+                <button 
+                  class="nav-btn" 
+                  @click.stop="navigateToNext(0)"
+                  :title="`导航到${routeData.waypoints[1]?.name || '下一点'}`"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M9 18l6-6-6-6"/>
+                  </svg>
+                </button>
               </div>
             </div>
             <!-- 起点到下一点的距离 -->
@@ -261,7 +261,7 @@
             v-show="waypointsExpanded"
             class="waypoint-container"
           >
-            <div class="waypoint-item via">
+            <div class="waypoint-item via" @click="handleWaypointClick(index + 1)">
               <span class="waypoint-label">{{ index + 1 }}</span>
               <div class="waypoint-details">
                 <div class="waypoint-name">{{ waypoint.name || `地点${index + 2}` }}</div>
@@ -282,6 +282,29 @@
                   </svg>
                   <span>停留时间: {{ waypoint.estimated_time }}</span>
                 </div>
+              </div>
+              <!-- 导航按钮 -->
+              <div class="waypoint-actions">
+                <button 
+                  v-if="index > 0"
+                  class="nav-btn prev" 
+                  @click.stop="navigateToPrev(index + 1)"
+                  :title="`导航到${routeData.waypoints[index]?.name || '上一点'}`"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M15 18l-6-6 6-6"/>
+                  </svg>
+                </button>
+                <button 
+                  v-if="index + 2 < routeData.waypoints.length"
+                  class="nav-btn next" 
+                  @click.stop="navigateToNext(index + 1)"
+                  :title="`导航到${routeData.waypoints[index + 2]?.name || '下一点'}`"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M9 18l6-6-6-6"/>
+                  </svg>
+                </button>
               </div>
             </div>
             <!-- 中间点到下一点的距离 -->
@@ -306,7 +329,7 @@
 
           <!-- 终点 -->
           <div v-if="routeData.waypoints[routeData.waypoints.length - 1]" class="waypoint-container">
-            <div class="waypoint-item end">
+            <div class="waypoint-item end" @click="handleWaypointClick(routeData.waypoints.length - 1)">
               <span class="waypoint-label">终</span>
               <div class="waypoint-details">
                 <div class="waypoint-name">{{ routeData.waypoints[routeData.waypoints.length - 1].name || '终点' }}</div>
@@ -327,6 +350,18 @@
                   </svg>
                   <span>停留时间: {{ routeData.waypoints[routeData.waypoints.length - 1].estimated_time }}</span>
                 </div>
+              </div>
+              <!-- 导航按钮 -->
+              <div v-if="routeData.waypoints.length > 1" class="waypoint-actions">
+                <button 
+                  class="nav-btn prev" 
+                  @click.stop="navigateToPrev(routeData.waypoints.length - 1)"
+                  :title="`从${routeData.waypoints[routeData.waypoints.length - 2]?.name || '上一点'}导航到此`"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M15 18l-6-6 6-6"/>
+                  </svg>
+                </button>
               </div>
             </div>
           </div>
@@ -369,10 +404,6 @@ const props = defineProps({
     type: String,
     default: '获取中...'
   },
-  currentPolicy: {
-    type: String,
-    default: '0'
-  },
   elevationLoading: {
     type: Boolean,
     default: false
@@ -380,12 +411,11 @@ const props = defineProps({
 })
 
 // Emits
-const emit = defineEmits(['clear-route', 'policy-change'])
+const emit = defineEmits(['clear-route', 'waypoint-navigate', 'waypoint-click'])
 
 // 响应式数据
 const isCollapsed = ref(false)
 const waypointsExpanded = ref(false)
-const selectedPolicy = ref(props.currentPolicy)
 
 // 拖拽和调整大小相关状态
 const panelRef = ref(null)
@@ -630,22 +660,54 @@ const toggleWaypoints = () => {
   waypointsExpanded.value = !waypointsExpanded.value
 }
 
-const getPolicyDescription = (policy) => {
-  const descriptions = {
-    '0': '综合考虑路线距离、路况和通行速度，提供平衡的骑行方案',
-    '1': '优先选择适合骑行的道路，平衡距离与路况条件',
-    '2': '以最短时间为目标，优先选择通行速度较快的路线'
+
+// 处理途径点点击
+const handleWaypointClick = (index) => {
+  console.log('点击途径点:', index, props.routeData?.waypoints?.[index])
+  emit('waypoint-click', {
+    index,
+    waypoint: props.routeData?.waypoints?.[index]
+  })
+}
+
+// 导航到下一个途径点
+const navigateToNext = (currentIndex) => {
+  const nextIndex = currentIndex + 1
+  if (nextIndex < props.routeData?.waypoints?.length) {
+    const startWaypoint = props.routeData.waypoints[currentIndex]
+    const endWaypoint = props.routeData.waypoints[nextIndex]
+    
+    console.log('导航到下一点:', { currentIndex, nextIndex, startWaypoint, endWaypoint })
+    
+    emit('waypoint-navigate', {
+      type: 'next',
+      startIndex: currentIndex,
+      endIndex: nextIndex,
+      startWaypoint,
+      endWaypoint,
+      direction: 'forward'
+    })
   }
-  return descriptions[policy] || descriptions['0']
 }
 
-const onPolicyChange = () => {
-  console.log('RouteInfoPanel 策略变更:', selectedPolicy.value)
-  emit('policy-change', selectedPolicy.value)
-}
-
-const updatePolicy = (policy) => {
-  selectedPolicy.value = policy
+// 导航到上一个途径点
+const navigateToPrev = (currentIndex) => {
+  const prevIndex = currentIndex - 1
+  if (prevIndex >= 0) {
+    const startWaypoint = props.routeData.waypoints[prevIndex]
+    const endWaypoint = props.routeData.waypoints[currentIndex]
+    
+    console.log('导航到上一点:', { currentIndex, prevIndex, startWaypoint, endWaypoint })
+    
+    emit('waypoint-navigate', {
+      type: 'prev',
+      startIndex: prevIndex,
+      endIndex: currentIndex,
+      startWaypoint,
+      endWaypoint,
+      direction: 'backward'
+    })
+  }
 }
 
 // 窗口大小变化处理
@@ -677,7 +739,6 @@ onUnmounted(() => {
 defineExpose({
   togglePanel,
   isCollapsed,
-  updatePolicy,
   resetPosition,
   panelPosition
 })
@@ -998,65 +1059,6 @@ defineExpose({
   border-bottom: 2px solid #2196F3;
 }
 
-/* 策略选择器 */
-.policy-selector {
-  margin-bottom: 16px;
-  padding: 12px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-radius: 8px;
-  border: 1px solid #dee2e6;
-}
-
-.policy-label {
-  display: block;
-  font-size: 13px;
-  color: #495057;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-.policy-select {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #ced4da;
-  border-radius: 6px;
-  font-size: 13px;
-  color: #495057;
-  background: white;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
-  background-position: right 8px center;
-  background-repeat: no-repeat;
-  background-size: 16px;
-  padding-right: 32px;
-}
-
-.policy-select:focus {
-  outline: none;
-  border-color: #2196F3;
-  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
-}
-
-.policy-select:hover {
-  border-color: #adb5bd;
-}
-
-.policy-description {
-  margin-top: 8px;
-  padding: 8px 10px;
-  background: rgba(33, 150, 243, 0.05);
-  border-radius: 6px;
-  border-left: 3px solid #2196F3;
-}
-
-.description-text {
-  font-size: 11px;
-  color: #495057;
-  line-height: 1.4;
-  display: block;
-}
 
 /* 高程信息样式 */
 .elevation-info {
@@ -1310,6 +1312,8 @@ defineExpose({
   padding: 12px;
   border-radius: 8px;
   transition: all 0.2s ease;
+  cursor: pointer;
+  position: relative;
 }
 
 .waypoint-item.start {
@@ -1500,6 +1504,74 @@ defineExpose({
   border: 1px solid #e9ecef;
   font-weight: 500;
   white-space: nowrap;
+}
+
+/* 途径点导航按钮样式 */
+.waypoint-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-left: auto;
+  opacity: 0;
+  transition: all 0.2s ease;
+}
+
+.waypoint-item:hover .waypoint-actions {
+  opacity: 1;
+}
+
+.nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(76, 175, 80, 0.1);
+  color: #4CAF50;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.nav-btn:hover {
+  background: #4CAF50;
+  color: white;
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.nav-btn.prev {
+  background: rgba(255, 152, 0, 0.1);
+  color: #FF9800;
+}
+
+.nav-btn.prev:hover {
+  background: #FF9800;
+  color: white;
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+}
+
+.nav-btn.next {
+  background: rgba(33, 150, 243, 0.1);
+  color: #2196F3;
+}
+
+.nav-btn.next:hover {
+  background: #2196F3;
+  color: white;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+}
+
+.nav-btn svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2;
+}
+
+.nav-btn:active {
+  transform: scale(0.95);
 }
 
 /* 操作按钮 */

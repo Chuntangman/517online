@@ -70,11 +70,11 @@
       :navigation-info="currentNavigationInfo"
       :visible="showRouteInfo"
       :current-weather-text="currentWeatherText"
-      :current-policy="currentRoutePolicy"
       :elevation-loading="elevationLoading"
       @show-full-navigation="handleShowFullNavigation"
       @clear-route="handleClearRouteFromPanel"
-      @policy-change="handlePolicyChangeFromPanel"
+      @waypoint-navigate="handleWaypointNavigate"
+      @waypoint-click="handleWaypointClick"
       ref="routeInfoPanelRef"
     />
   </div>
@@ -1995,6 +1995,59 @@ const showRouteInfoPanel = async (routeData) => {
     forceHideNavigation()
   }, 50)
   // RouteInfoPanel 已显示
+}
+
+// 处理途径点导航事件
+const handleWaypointNavigate = async (navigationData) => {
+  console.log('处理途径点导航:', navigationData)
+  
+  const { startWaypoint, endWaypoint, direction, type } = navigationData
+  
+  // 检查途径点是否有有效坐标
+  if (!startWaypoint?.longitude || !startWaypoint?.latitude || 
+      !endWaypoint?.longitude || !endWaypoint?.latitude) {
+    console.error('途径点缺少有效坐标信息')
+    return
+  }
+  
+  try {
+    // 显示导航面板
+    showNavigation.value = true
+    showRouteInfo.value = false
+    
+    // 等待导航组件初始化
+    await nextTick()
+    
+    if (cyclingNavigationRef.value) {
+      // 设置起终点坐标
+      const startCoords = [parseFloat(startWaypoint.longitude), parseFloat(startWaypoint.latitude)]
+      const endCoords = [parseFloat(endWaypoint.longitude), parseFloat(endWaypoint.latitude)]
+      
+      console.log('设置导航坐标:', { startCoords, endCoords })
+      
+      // 使用CyclingNavigation的搜索方法
+      cyclingNavigationRef.value.searchRouteWithCoordinates(startCoords, endCoords)
+    }
+  } catch (error) {
+    console.error('途径点导航失败:', error)
+  }
+}
+
+// 处理途径点点击事件
+const handleWaypointClick = (clickData) => {
+  console.log('途径点被点击:', clickData)
+  
+  const { waypoint, index } = clickData
+  
+  // 可以在这里添加途径点点击的处理逻辑
+  // 比如显示途径点详情、在地图上高亮显示等
+  if (waypoint?.longitude && waypoint?.latitude) {
+    // 将地图中心移动到该途径点
+    if (mapInstance.value) {
+      mapInstance.value.setCenter([parseFloat(waypoint.longitude), parseFloat(waypoint.latitude)])
+      mapInstance.value.setZoom(15)
+    }
+  }
 }
 
 // 暴露方法给父组件
