@@ -330,14 +330,23 @@ defineExpose({
   border-radius: 12px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03);
   padding: 20px;
-  margin-bottom: 20px;
   border: 1px solid rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(4px);
+  position: relative;
+  /* 占满整个可用高度 */
+  height: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 规划区域 */
 .planning-section {
   min-height: 200px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
 }
 
 /* 智能匹配样式 */
@@ -369,6 +378,7 @@ defineExpose({
   cursor: pointer;
   transition: all 0.3s ease;
   -webkit-appearance: none;
+  appearance: none;
 }
 
 .slider::-webkit-slider-thumb {
@@ -522,6 +532,11 @@ defineExpose({
   margin-top: 20px;
   padding-top: 20px;
   border-top: 1px solid rgba(0, 0, 0, 0.1);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .match-results h4 {
@@ -529,14 +544,16 @@ defineExpose({
   font-size: 16px;
   font-weight: 600;
   color: #303133;
+  flex-shrink: 0;
 }
 
 .results-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: 300px;
+  flex: 1;
   overflow-y: auto;
+  min-height: 0;
 }
 
 .result-item {
@@ -651,6 +668,68 @@ defineExpose({
 }
 
 /* 响应式设计 */
+
+/* 低分辨率优化 (1K分辨率及以下) */
+@media (max-height: 900px) {
+  .planning-section {
+    min-height: 180px;
+  }
+  
+  .slider-group {
+    margin-bottom: 16px;
+  }
+  
+  .type-group {
+    margin-bottom: 16px;
+  }
+  
+  .match-results {
+    margin-top: 16px;
+    padding-top: 16px;
+  }
+  
+  .results-list {
+    gap: 10px;
+  }
+  
+  .result-item {
+    padding: 10px;
+  }
+}
+
+/* 超低分辨率优化 */
+@media (max-height: 768px) {
+  .planning-section {
+    min-height: 160px;
+  }
+  
+  .slider-group {
+    margin-bottom: 12px;
+  }
+  
+  .type-group {
+    margin-bottom: 12px;
+  }
+  
+  .match-results {
+    margin-top: 12px;
+    padding-top: 12px;
+  }
+  
+  .results-list {
+    gap: 8px;
+  }
+  
+  .result-item {
+    padding: 8px;
+  }
+  
+  .match-results h4 {
+    margin-bottom: 10px;
+    font-size: 14px;
+  }
+}
+
 @media (max-width: 768px) {
   .cycling-types {
     flex-direction: column;

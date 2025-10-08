@@ -54,7 +54,7 @@
     </div>
 
     <!-- 面板内容 -->
-    <div v-show="!isCollapsed" class="panel-content">
+    <div v-show="!isCollapsed" class="panel-content" :class="{ 'content-hidden': isCollapsed }">
       <!-- 路线基本信息 -->
       <div v-if="routeData?.route" class="route-basic-info">
         <h4>路线信息</h4>
@@ -450,7 +450,7 @@ const panelStyle = computed(() => ({
   left: `${panelPosition.value.x}px`,
   top: `${panelPosition.value.y}px`,
   width: `${panelPosition.value.width}px`,
-  height: isCollapsed.value ? 'auto' : `${panelPosition.value.height}px`,
+  height: isCollapsed.value ? '68px' : `${panelPosition.value.height}px`,
   position: 'fixed',
   zIndex: isDragging.value || isResizing.value ? 1100 : 1000
 }))
@@ -482,7 +482,7 @@ const handleDrag = (event) => {
   
   // 边界检查
   const maxX = window.innerWidth - panelPosition.value.width
-  const maxY = window.innerHeight - (isCollapsed.value ? 60 : panelPosition.value.height)
+  const maxY = window.innerHeight - (isCollapsed.value ? 68 : panelPosition.value.height)
   
   panelPosition.value.x = Math.max(0, Math.min(newX, maxX))
   panelPosition.value.y = Math.max(0, Math.min(newY, maxY))
@@ -582,7 +582,8 @@ const resetPosition = () => {
 // 智能定位（避免超出屏幕）
 const adjustPosition = () => {
   const maxX = window.innerWidth - panelPosition.value.width
-  const maxY = window.innerHeight - panelPosition.value.height
+  const currentHeight = isCollapsed.value ? 68 : panelPosition.value.height
+  const maxY = window.innerHeight - currentHeight
   
   if (panelPosition.value.x > maxX) {
     panelPosition.value.x = Math.max(0, maxX)
@@ -752,7 +753,7 @@ defineExpose({
   backdrop-filter: blur(12px);
   border: 2px solid rgba(255, 255, 255, 0.3);
   overflow: hidden;
-  transition: box-shadow 0.3s ease, transform 0.2s ease;
+  transition: box-shadow 0.3s ease, transform 0.2s ease, height 0.3s ease;
   user-select: none;
   min-width: 360px;
   min-height: 400px;
@@ -774,7 +775,17 @@ defineExpose({
 }
 
 .route-info-panel.collapsed {
-  height: auto !important;
+  min-height: 68px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+.route-info-panel.collapsed:hover {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.16);
+}
+
+/* 收起状态下的特殊样式 */
+.route-info-panel.collapsed .panel-header {
+  border-radius: 14px;
 }
 
 .panel-header {
@@ -979,6 +990,15 @@ defineExpose({
   height: calc(100% - 68px);
   overflow-y: auto;
   overflow-x: hidden;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.panel-content.content-hidden {
+  opacity: 0;
+  transform: translateY(-10px);
+  pointer-events: none;
 }
 
 /* 路线基本信息 */

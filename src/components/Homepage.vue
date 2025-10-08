@@ -1,18 +1,75 @@
 <template>
   <div class="homepage">
-    <!-- 背景视频 -->
-    <div class="background-video">
-      <iframe 
-        src="https://player.bilibili.com/player.html?isOutside=true&aid=375573984&bvid=BV1uo4y1m74J&cid=337981426&p=1&autoplay=1&muted=1&high_quality=1&danmaku=0&t=0&as_wide=1&hasMuteBtn=1" 
-        scrolling="no" 
-        border="0" 
-        frameborder="no" 
-        framespacing="0" 
-        allowfullscreen="true"
-        sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
-        referrerpolicy="no-referrer-when-downgrade"
-        class="video-iframe">
-      </iframe>
+    <!-- 动态背景装饰元素 -->
+    <div class="background-decoration">
+      <!-- 动态壁纸背景 -->
+      <div 
+        class="bg-wallpaper" 
+        :class="{ 'loading': backgroundLoading, 'error': backgroundError }"
+        :style="backgroundImage ? { backgroundImage: `url(${backgroundImage})` } : {}"
+      ></div>
+      
+      <!-- 备用渐变背景 -->
+      <div class="bg-gradient" :class="{ 'hidden': backgroundImage && !backgroundError }"></div>
+      
+      <!-- 装饰图案覆盖层 -->
+      <div class="bg-pattern"></div>
+      
+      <!-- 浮动装饰元素 -->
+      <div class="floating-elements">
+        <div class="floating-circle circle-1"></div>
+        <div class="floating-circle circle-2"></div>
+        <div class="floating-circle circle-3"></div>
+      </div>
+      
+      <!-- 背景加载状态 -->
+      <div class="bg-loading" v-if="backgroundLoading">
+        <div class="loading-spinner"></div>
+        <p>正在加载今日壁纸...</p>
+      </div>
+    </div>
+    
+
+    <!-- 可控制的小窗口视频播放器 -->
+    <div class="video-player-widget" :class="{ 'minimized': isVideoMinimized, 'hidden': !showVideo, 'fullscreen': isVideoFullscreen }">
+      <div class="video-controls">
+        <button @click="toggleVideo" class="control-btn close-btn" v-if="showVideo" title="关闭视频">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+          </svg>
+        </button>
+        <button @click="toggleMinimize" class="control-btn minimize-btn" v-if="showVideo && !isVideoFullscreen" title="最小化">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 13H5v-2h14v2z"/>
+          </svg>
+        </button>
+        <button @click="toggleFullscreen" class="control-btn fullscreen-btn" v-if="showVideo && !isVideoMinimized" :title="isVideoFullscreen ? '退出全屏' : '全屏'">
+          <svg v-if="!isVideoFullscreen" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+          </svg>
+          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
+          </svg>
+        </button>
+        <button @click="showVideo = true" class="control-btn play-btn" v-if="!showVideo" title="播放视频">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="video-container" v-if="showVideo && !isVideoMinimized">
+        <iframe 
+          src="https://player.bilibili.com/player.html?isOutside=true&aid=375573984&bvid=BV1uo4y1m74J&cid=337981426&p=1&autoplay=1&muted=1&high_quality=1&danmaku=0&t=0&as_wide=1&hasMuteBtn=1" 
+          scrolling="no" 
+          border="0" 
+          frameborder="no" 
+          framespacing="0" 
+          allowfullscreen="true"
+          sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
+          referrerpolicy="no-referrer-when-downgrade"
+          class="video-iframe">
+        </iframe>
+      </div>
     </div>
     
     <!-- 主标题区域 -->
@@ -51,9 +108,40 @@
             开始探索
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- 版权信息区域 -->
+    <footer class="footer">
+      <div class="footer-content">
+        <div class="footer-left">
+          <p class="copyright">© 2025 517骑行驿站 - 探索无限可能的骑行之旅</p>
+          <p class="description">专业的骑行路线规划与分享平台</p>
+        </div>
+        <div class="footer-right">
+          <div class="social-links">
+            <button @click="refreshWallpaper" class="refresh-wallpaper-btn" title="随机更换UHD超高清背景壁纸" @mouseenter="showTooltip = true" @mouseleave="showTooltip = false">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+              </svg>
+              <div class="tooltip" v-if="showTooltip">
+                UHD超高清背景图片来源于必应
+              </div>
+            </button>
+            <a href="#" class="social-link" title="官方网站">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+              </svg>
+            </a>
+            <a href="#" class="social-link" title="联系我们">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+              </svg>
+            </a>
           </div>
         </div>
-
+      </div>
+    </footer>
   </div>
 </template>
 
@@ -110,6 +198,115 @@ const scheduler = new TimeSlicingScheduler()
 // 初始化路由
 const router = useRouter()
 
+// 视频播放器控制状态
+const showVideo = ref(true) // 默认显示视频
+const isVideoMinimized = ref(false)
+const isVideoFullscreen = ref(false)
+
+// 动态背景壁纸状态
+const backgroundImage = ref('')
+const backgroundLoading = ref(true)
+const backgroundError = ref(false)
+
+// 工具提示状态
+const showTooltip = ref(false)
+
+// 视频控制方法
+const toggleVideo = () => {
+  showVideo.value = !showVideo.value
+  if (!showVideo.value) {
+    isVideoMinimized.value = false
+    isVideoFullscreen.value = false
+  }
+}
+
+const toggleMinimize = () => {
+  isVideoMinimized.value = !isVideoMinimized.value
+  if (isVideoMinimized.value) {
+    isVideoFullscreen.value = false
+  }
+}
+
+const toggleFullscreen = () => {
+  isVideoFullscreen.value = !isVideoFullscreen.value
+  if (isVideoFullscreen.value) {
+    isVideoMinimized.value = false
+  }
+}
+
+// 必应壁纸API相关方法 - UHD超高清版本
+const fetchBingWallpaper = async () => {
+  try {
+    backgroundLoading.value = true
+    backgroundError.value = false
+    
+    // 使用直接可用的必应壁纸URL（UHD超高清版本）
+    const imageUrl = 'https://bing.img.run/uhd.php'
+    
+    // 预加载图片以确保加载成功
+    const img = new Image()
+    img.onload = () => {
+      backgroundImage.value = imageUrl
+      backgroundLoading.value = false
+      console.log('✅ 必应UHD壁纸加载成功')
+    }
+    
+    img.onerror = () => {
+      console.warn('⚠️ 必应UHD壁纸加载失败，使用渐变背景')
+      useFallbackBackground()
+    }
+    
+    // 添加时间戳避免缓存问题
+    img.src = `${imageUrl}?t=${Date.now()}`
+    
+  } catch (error) {
+    console.warn('⚠️ 必应UHD壁纸请求失败:', error.message)
+    useFallbackBackground()
+  }
+}
+
+// 备用方案：渐变背景
+const useFallbackBackground = () => {
+  backgroundImage.value = ''
+  backgroundLoading.value = false
+  backgroundError.value = true
+}
+
+// 随机刷新壁纸 - 使用UHD超高清随机历史壁纸
+const refreshWallpaper = async () => {
+  try {
+    backgroundLoading.value = true
+    backgroundError.value = false
+    
+    // 使用随机必应历史壁纸UHD超高清URL，添加多重随机参数确保每次都不同
+    const randomParam = Math.random().toString(36).substring(2, 15)
+    const timestamp = Date.now()
+    const imageUrl = `https://bing.img.run/rand_uhd.php?r=${randomParam}&t=${timestamp}&cache=${Math.floor(Math.random() * 10000)}`
+    
+    const img = new Image()
+    img.onload = () => {
+      // 强制更新背景图片，即使URL相同也要重新渲染
+      backgroundImage.value = ''
+      setTimeout(() => {
+        backgroundImage.value = imageUrl
+        backgroundLoading.value = false
+        console.log('✅ 随机UHD壁纸加载成功')
+      }, 50)
+    }
+    
+    img.onerror = () => {
+      console.warn('⚠️ 随机UHD壁纸加载失败')
+      useFallbackBackground()
+    }
+    
+    img.src = imageUrl
+    
+  } catch (error) {
+    console.warn('⚠️ 随机UHD壁纸请求失败:', error.message)
+    useFallbackBackground()
+  }
+}
+
 // 智能响应式数据管理
 const images = customRef((track, trigger) => {
   let value = []
@@ -164,7 +361,7 @@ const preloadImages = (imageList) => {
   })
   
   Promise.allSettled(preloadPromises).then(() => {
-    console.log('图片预加载完成')
+    console.log('✅ 图片预加载完成')
   })
 }
 
@@ -416,12 +613,7 @@ const setupBicycleCursors = () => {
         el.style.cursor = bicycleCursors.text
       })
       
-      console.log('🚴‍♂️ 单车骑行主题cursor设置成功:')
-      console.log('🚲 默认箭头: 单车轮廓图标')
-      console.log('🤏 手型指针: 骑行握把手势')
-      console.log('🏷️ 文本选择: 路标样式')
-      console.log('⚡ 等待指针: 转动车轮')
-      console.log('➡️ 移动指针: 骑行方向箭头')
+      console.log('✅ 单车主题cursor设置完成')
     } catch (error) {
       console.error('❌ 设置单车cursor时出错:', error)
     }
@@ -442,6 +634,9 @@ onMounted(async () => {
   nextTick(() => {
     setupBicycleCursors()
   })
+  
+  // 优先加载背景壁纸
+  await fetchBingWallpaper()
   
   // 使用 requestIdleCallback 延迟非关键初始化
   requestIdleCallback(() => {
@@ -520,8 +715,8 @@ const perfMonitor = {
       this.lastCheck = now
       
       // 简单的性能日志
-      if (fps < 30) {
-        console.warn('Low FPS detected:', fps)
+      if (fps < 20) {
+        console.warn('⚠️ 性能警告: FPS过低', fps)
       }
     }
   }
@@ -541,7 +736,7 @@ const handleMouseMove = (e, cardIndex) => {
       perfMonitor.checkPerformance()
       
       const card = e.currentTarget
-      const bgElement = card.querySelector('.card-bg')
+      const bgElement = card?.querySelector('.card-bg')
       
       if (!card._cachedRect) {
         card._cachedRect = card.getBoundingClientRect()
@@ -586,7 +781,7 @@ const handleMouseEnter = (cardIndex, e) => {
 // 处理鼠标离开 - 直接DOM操作重置
 const handleMouseLeave = (cardIndex, e) => {
   const card = e.currentTarget
-  const bgElement = card.querySelector('.card-bg')
+  const bgElement = card?.querySelector('.card-bg')
   
   if (cardData[cardIndex]) {
     cardData[cardIndex].mouseLeaveDelay = setTimeout(() => {
@@ -621,10 +816,12 @@ onUnmounted(() => {
   activeTransforms.clear()
   
   document.querySelectorAll('.box').forEach(el => {
-    delete el._cachedRect
-    const bgElement = el.querySelector('.card-bg')
-    if (bgElement) {
-      bgElement.style.transform = 'translate3d(0px, 0px, 0px)'
+    if (el) {
+      delete el._cachedRect
+      const bgElement = el.querySelector('.card-bg')
+      if (bgElement) {
+        bgElement.style.transform = 'translate3d(0px, 0px, 0px)'
+      }
     }
   })
   
@@ -679,20 +876,22 @@ const handleCardClick = (image, index, event) => {
   font-family: "Raleway", "Microsoft YaHei", sans-serif;
   font-weight: 500;
   -webkit-font-smoothing: antialiased;
-  padding: 40px 0;
+  padding: 40px 0 0 0;
   margin: 0 !important;
   position: relative;
   left: 0;
   right: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* CSS中不设置cursor，完全由JavaScript动态设置 */
 
 /* 所有cursor都由JavaScript动态设置，CSS不参与 */
 
-/* 背景视频样式 */
-.background-video {
+/* 动态背景装饰样式 */
+.background-decoration {
   position: fixed;
   top: 0;
   left: 0;
@@ -702,44 +901,418 @@ const handleCardClick = (image, index, event) => {
   overflow: hidden;
 }
 
-.video-iframe {
+/* 动态壁纸背景 */
+.bg-wallpaper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transition: opacity 1s ease-in-out;
+  filter: brightness(0.8) contrast(1.1);
+}
+
+.bg-wallpaper:not(.loading):not(.error) {
+  opacity: 1;
+}
+
+.bg-wallpaper.loading {
+  opacity: 0.3;
+  filter: blur(2px) brightness(0.6);
+}
+
+.bg-wallpaper.error {
+  opacity: 0;
+}
+
+/* 备用渐变背景 */
+.bg-gradient {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, 
+    #2E7D32 0%, 
+    #388E3C 25%, 
+    #4CAF50 50%, 
+    #66BB6A 75%, 
+    #81C784 100%);
+  opacity: 0.9;
+  transition: opacity 1s ease-in-out;
+}
+
+.bg-gradient.hidden {
+  opacity: 0;
+}
+
+/* 装饰图案覆盖层 */
+.bg-pattern {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    radial-gradient(circle at 25% 25%, rgba(255, 255, 255, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 75% 75%, rgba(255, 255, 255, 0.04) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.1) 0%, transparent 50%);
+  background-size: 400px 400px, 300px 300px, 200px 200px;
+  animation: patternFloat 20s ease-in-out infinite;
+  opacity: 0.6;
+  mix-blend-mode: overlay;
+}
+
+.floating-elements {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.floating-circle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  animation: float 6s ease-in-out infinite;
+}
+
+.circle-1 {
+  width: 80px;
+  height: 80px;
+  top: 20%;
+  left: 10%;
+  animation-delay: 0s;
+  animation-duration: 8s;
+}
+
+.circle-2 {
+  width: 120px;
+  height: 120px;
+  top: 60%;
+  right: 15%;
+  animation-delay: -2s;
+  animation-duration: 10s;
+}
+
+.circle-3 {
+  width: 60px;
+  height: 60px;
+  top: 80%;
+  left: 70%;
+  animation-delay: -4s;
+  animation-duration: 6s;
+}
+
+@keyframes patternFloat {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(10px, -10px) rotate(1deg); }
+  50% { transform: translate(-5px, 5px) rotate(-1deg); }
+  75% { transform: translate(-10px, -5px) rotate(0.5deg); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-20px) rotate(180deg); }
+}
+
+/* 背景加载状态 */
+.bg-loading {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 120%;
-  height: 120%;
   transform: translate(-50%, -50%);
-  border: none;
-  opacity: 0.4;
-  filter: blur(0.5px) saturate(1.2) brightness(1.1);
+  text-align: center;
+  color: rgba(255, 255, 255, 0.8);
+  z-index: 10;
 }
 
-/* 主标题 - 无人机旅游风格 */
-.title {
-  font-family: "Raleway", "Microsoft YaHei", sans-serif;
-  font-size: 3rem;
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top: 3px solid rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 15px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.bg-loading p {
+  margin: 0;
+  font-size: 14px;
   font-weight: 300;
+  letter-spacing: 1px;
+}
+
+/* 版权栏中的刷新按钮样式 */
+.refresh-wallpaper-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.8);
+  padding: 10px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  position: relative;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.refresh-wallpaper-btn:hover {
+  background: rgba(76, 175, 80, 0.2);
+  border-color: rgba(76, 175, 80, 0.4);
+  color: white;
+  box-shadow: 0 5px 15px rgba(76, 175, 80, 0.3);
+}
+
+.refresh-wallpaper-btn:hover svg {
+  transform: rotate(180deg) scale(1.1);
+  transition: transform 0.3s ease;
+}
+
+/* 工具提示样式 */
+.tooltip {
+  position: absolute;
+  bottom: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 1000;
+  animation: tooltipFadeIn 0.2s ease-in-out;
+}
+
+.tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: rgba(0, 0, 0, 0.8);
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* 视频播放器小窗口样式 */
+.video-player-widget {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 12px;
+  overflow: hidden;
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.video-player-widget.hidden {
+  width: 60px;
+  height: 40px;
+}
+
+.video-player-widget.minimized {
+  width: 60px;
+  height: 40px;
+}
+
+.video-player-widget:not(.hidden):not(.minimized):not(.fullscreen) {
+  width: 320px;
+  height: 220px;
+}
+
+.video-player-widget.fullscreen {
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  width: 100vw !important;
+  height: 100vh !important;
+  border-radius: 0;
+  z-index: 9999;
+}
+
+.video-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  gap: 8px;
+}
+
+.video-player-widget.fullscreen .video-controls {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 8px;
+  z-index: 10001;
+}
+
+.control-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: white;
+  padding: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.control-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.video-container {
+  width: 100%;
+  height: calc(100% - 40px);
+  position: relative;
+}
+
+.video-player-widget.fullscreen .video-container {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.video-container .video-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* 视频播放器响应式设计 */
+@media (max-width: 768px) {
+  .video-player-widget:not(.fullscreen) {
+    bottom: 15px;
+    right: 15px;
+  }
+  
+  .video-player-widget:not(.hidden):not(.minimized):not(.fullscreen) {
+    width: 280px;
+    height: 180px;
+  }
+}
+
+@media (max-width: 480px) {
+  .video-player-widget:not(.fullscreen) {
+    bottom: 10px;
+    right: 10px;
+  }
+  
+  .video-player-widget:not(.hidden):not(.minimized):not(.fullscreen) {
+    width: 240px;
+    height: 150px;
+  }
+  
+  .video-player-widget.hidden,
+  .video-player-widget.minimized {
+    width: 50px;
+    height: 35px;
+  }
+  
+  .control-btn {
+    padding: 4px;
+  }
+}
+
+/* 主标题 - 纯文字强辨识度设计 */
+.title {
+  font-family: "Impact", "Arial Black", "Franklin Gothic Medium", "Trebuchet MS", sans-serif;
+  font-size: 8rem;
+  font-weight: 900;
   color: #ffffff;
   text-align: center;
   margin-bottom: 40px;
-  text-shadow: rgba(0, 0, 0, 0.5) 0 2px 15px, rgba(0, 0, 0, 0.3) 0 1px 6px;
   position: relative;
   z-index: 10;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%);
-  padding: 25px 50px;
-  border-radius: 20px;
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  letter-spacing: 3px;
+  letter-spacing: 8px;
   text-transform: uppercase;
   transition: all 0.3s ease;
+  font-stretch: expanded;
+  /* 强辨识度文字阴影 */
+  text-shadow: 
+    /* 主要阴影 - 深色轮廓 */
+    -3px -3px 0 #1B5E20,
+    3px -3px 0 #1B5E20,
+    -3px 3px 0 #1B5E20,
+    3px 3px 0 #1B5E20,
+    /* 中层阴影 - 增强立体感 */
+    -6px -6px 0 #0D4E14,
+    6px -6px 0 #0D4E14,
+    -6px 6px 0 #0D4E14,
+    6px 6px 0 #0D4E14,
+    /* 外层发光 */
+    0 0 20px rgba(76, 175, 80, 0.8),
+    0 0 40px rgba(76, 175, 80, 0.6),
+    0 0 60px rgba(76, 175, 80, 0.4),
+    /* 深度阴影 */
+    0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
 .title:hover {
-  transform: translateY(-2px);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.05) 100%);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  transform: translateY(-5px) scale(1.03);
+  /* 增强悬停时的发光效果 */
+  text-shadow: 
+    /* 主要阴影 - 深色轮廓 */
+    -3px -3px 0 #1B5E20,
+    3px -3px 0 #1B5E20,
+    -3px 3px 0 #1B5E20,
+    3px 3px 0 #1B5E20,
+    /* 中层阴影 - 增强立体感 */
+    -6px -6px 0 #0D4E14,
+    6px -6px 0 #0D4E14,
+    -6px 6px 0 #0D4E14,
+    6px 6px 0 #0D4E14,
+    /* 增强的外层发光 */
+    0 0 30px rgba(76, 175, 80, 1),
+    0 0 60px rgba(76, 175, 80, 0.8),
+    0 0 90px rgba(76, 175, 80, 0.6),
+    /* 深度阴影 */
+    0 15px 40px rgba(0, 0, 0, 0.6);
 }
 
 /* 容器 */
@@ -752,6 +1325,7 @@ const handleCardClick = (image, index, event) => {
   margin-top: 2rem;
   position: relative;
   z-index: 5;
+  flex: 1;
 }
 
 /* 卡片盒子 - 无人机旅游风格 */
@@ -1127,7 +1701,8 @@ const handleCardClick = (image, index, event) => {
 /* 响应式设计 */
 @media (max-width: 1200px) {
   .title {
-    font-size: 2.5rem;
+    font-size: 6rem;
+    letter-spacing: 6px;
   }
   
   .container {
@@ -1137,7 +1712,8 @@ const handleCardClick = (image, index, event) => {
 
 @media (max-width: 1024px) {
   .title {
-    font-size: 2.2rem;
+    font-size: 5rem;
+    letter-spacing: 5px;
   }
   
   .container {
@@ -1180,7 +1756,8 @@ const handleCardClick = (image, index, event) => {
   }
   
   .title {
-    font-size: 2rem;
+    font-size: 4rem;
+    letter-spacing: 4px;
     margin-bottom: 30px;
   }
   
@@ -1205,7 +1782,8 @@ const handleCardClick = (image, index, event) => {
 
 @media (max-width: 480px) {
   .title {
-    font-size: 1.8rem;
+    font-size: 3rem;
+    letter-spacing: 3px;
   }
   
   .box {
@@ -1234,6 +1812,137 @@ const handleCardClick = (image, index, event) => {
   .card-bg {
     height: calc(100% - 8vh);
   }
-  
 }
+
+/* 版权信息区域样式 */
+.footer {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.05) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 30px 0;
+  margin-top: auto;
+  position: relative;
+  z-index: 10;
+}
+
+.footer-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.footer-left {
+  flex: 1;
+  min-width: 300px;
+}
+
+.footer-right {
+  display: flex;
+  align-items: center;
+}
+
+.copyright {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1rem;
+  font-weight: 500;
+  margin: 0 0 8px 0;
+  font-family: "Raleway", "Microsoft YaHei", sans-serif;
+  letter-spacing: 0.5px;
+}
+
+.description {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  font-weight: 300;
+  margin: 0;
+  font-family: "Lato", "Microsoft YaHei", sans-serif;
+  letter-spacing: 0.3px;
+}
+
+.social-links {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+.social-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.8);
+  text-decoration: none;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.social-link:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: white;
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 5px 15px rgba(255, 255, 255, 0.1);
+}
+
+/* 版权信息响应式设计 */
+@media (max-width: 768px) {
+  .footer-content {
+    flex-direction: column;
+    text-align: center;
+    padding: 0 20px;
+  }
+  
+  .footer-left {
+    min-width: auto;
+    width: 100%;
+  }
+  
+  .copyright {
+    font-size: 0.9rem;
+  }
+  
+  .description {
+    font-size: 0.8rem;
+  }
+  
+  .social-links {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .footer {
+    padding: 20px 0;
+  }
+  
+  .copyright {
+    font-size: 0.8rem;
+    margin-bottom: 5px;
+  }
+  
+  .description {
+    font-size: 0.7rem;
+  }
+  
+  .social-link {
+    width: 35px;
+    height: 35px;
+  }
+  
+  .social-links {
+    gap: 10px;
+  }
+}
+
 </style>

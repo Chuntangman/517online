@@ -7,7 +7,8 @@
 import { ref, reactive } from 'vue'
 import axios from 'axios'
 
-const API_BASE_URL = 'http://localhost:3000/api/v1'
+// 使用相对路径，由 Nginx 代理到后端
+const API_BASE_URL = '/api/v1'
 
 // 全局共享的地区状态
 let globalRegionState = null

@@ -592,6 +592,7 @@ defineExpose({
   flex-direction: column;
   border: 1px solid rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(4px);
+  position: relative;
 }
 
 /* 功能面板内容区 */

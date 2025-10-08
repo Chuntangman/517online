@@ -46,12 +46,26 @@ app.use(helmet({
 // CORS 配置
 app.use(cors({
   origin: function(origin, callback) {
-    // 允许来自 localhost 的不同端口的请求
-    const allowedOrigins = ['http://localhost:5173', 'http://localhost:5174', 'http://127.0.0.1:5173', 'http://127.0.0.1:5174'];
+    // 允许的来源列表
+    const allowedOrigins = [
+      'http://localhost:5173', 
+      'http://localhost:5174', 
+      'http://127.0.0.1:5173', 
+      'http://127.0.0.1:5174',
+      'http://47.122.117.45:8080',  // 生产环境前端
+      'http://47.122.117.45',       // 不带端口的访问
+    ];
+    
+    // 如果没有 origin（比如同源请求或某些工具），或在允许列表中，则允许
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      callback(new Error('不允许的来源'));
+      // 生产环境可以考虑允许所有来源
+      if (NODE_ENV === 'production') {
+        callback(null, true);  // 生产环境允许所有来源
+      } else {
+        callback(new Error('不允许的来源'));
+      }
     }
   },
   credentials: true,

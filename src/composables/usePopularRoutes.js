@@ -7,7 +7,8 @@ import { ref, computed, onMounted, watch } from 'vue'
 import axios from 'axios'
 import { useRegions } from './useRegions.js'
 
-const API_BASE_URL = 'http://localhost:3000/api/v1'
+// 使用相对路径，由 Nginx 代理到后端
+const API_BASE_URL = '/api/v1'
 
 export function usePopularRoutes() {
   // 路线数据

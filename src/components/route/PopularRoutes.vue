@@ -162,7 +162,8 @@ import axios from 'axios'
 import { usePopularRoutes } from '@/composables/usePopularRoutes.js'
 import simplifiedAnalytics from '@/utils/simplifiedAnalytics'
 
-const API_BASE_URL = 'http://localhost:3000/api/v1'
+// 使用相对路径，由 Nginx 代理到后端
+const API_BASE_URL = '/api/v1'
 
 // 发射事件到父组件
 const emit = defineEmits(['route-selected', 'route-visualize', 'route-navigate-with-markers', 'clear-previous-displays'])

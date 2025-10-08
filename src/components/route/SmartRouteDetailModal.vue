@@ -1,9 +1,12 @@
 <template>
   <div class="smart-route-detail-modal" @click="handleModalClick">
-    <div class="modal-content" @click.stop>
-      <div class="modal-header">
+    <div class="modal-content" @click.stop ref="modalContentRef">
+      <div class="modal-header" @mousedown="startDrag" @touchstart="startDrag">
         <h3>{{ route?.name || '路线详情' }}</h3>
-        <button class="close-button" @click="closeModal">×</button>
+        <div class="header-controls">
+          <span class="drag-hint">可拖动</span>
+          <button class="close-button" @click="closeModal">×</button>
+        </div>
       </div>
       
       <div class="modal-body">
@@ -138,11 +141,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
 import simplifiedAnalytics from '@/utils/simplifiedAnalytics'
 
-const API_BASE_URL = 'http://localhost:3000/api/v1'
+// 使用相对路径，由 Nginx 代理到后端
+const API_BASE_URL = '/api/v1'
 
 // Props
 const props = defineProps({
@@ -175,6 +179,12 @@ const emit = defineEmits(['close', 'route-selected', 'route-navigate-with-marker
 const waypoints = ref([])
 const waypointsLoading = ref(false)
 const waypointsError = ref(null)
+
+// 拖动相关状态
+const modalContentRef = ref(null)
+const isDragging = ref(false)
+const dragOffset = ref({ x: 0, y: 0 })
+const modalPosition = ref({ x: 0, y: 0 })
 
 // 检查是否可以在地图上显示
 const canShowOnMap = computed(() => {
@@ -228,6 +238,69 @@ const handleModalClick = (event) => {
   if (event.target === event.currentTarget) {
     closeModal()
   }
+}
+
+// 拖动功能
+const startDrag = (event) => {
+  if (event.target.classList.contains('close-button')) {
+    return // 不在关闭按钮上启动拖动
+  }
+  
+  isDragging.value = true
+  
+  const clientX = event.type === 'touchstart' ? event.touches[0].clientX : event.clientX
+  const clientY = event.type === 'touchstart' ? event.touches[0].clientY : event.clientY
+  
+  const rect = modalContentRef.value.getBoundingClientRect()
+  dragOffset.value = {
+    x: clientX - rect.left,
+    y: clientY - rect.top
+  }
+  
+  document.addEventListener('mousemove', handleDrag)
+  document.addEventListener('mouseup', stopDrag)
+  document.addEventListener('touchmove', handleDrag)
+  document.addEventListener('touchend', stopDrag)
+  
+  event.preventDefault()
+}
+
+const handleDrag = (event) => {
+  if (!isDragging.value) return
+  
+  const clientX = event.type === 'touchmove' ? event.touches[0].clientX : event.clientX
+  const clientY = event.type === 'touchmove' ? event.touches[0].clientY : event.clientY
+  
+  // 获取父容器（右侧面板）的边界
+  const parentContainer = modalContentRef.value.closest('.content-right')
+  if (!parentContainer) return
+  
+  const parentRect = parentContainer.getBoundingClientRect()
+  const modalRect = modalContentRef.value.getBoundingClientRect()
+  
+  // 计算新位置，确保不超出父容器边界
+  let newX = clientX - parentRect.left - dragOffset.value.x
+  let newY = clientY - parentRect.top - dragOffset.value.y
+  
+  // 边界检查
+  const maxX = parentRect.width - modalRect.width
+  const maxY = parentRect.height - modalRect.height
+  
+  newX = Math.max(0, Math.min(newX, maxX))
+  newY = Math.max(0, Math.min(newY, maxY))
+  
+  modalPosition.value = { x: newX, y: newY }
+  
+  event.preventDefault()
+}
+
+const stopDrag = () => {
+  isDragging.value = false
+  
+  document.removeEventListener('mousemove', handleDrag)
+  document.removeEventListener('mouseup', stopDrag)
+  document.removeEventListener('touchmove', handleDrag)
+  document.removeEventListener('touchend', stopDrag)
 }
 
 // 在地图上查看路线
@@ -318,27 +391,78 @@ const viewRouteOnMap = async () => {
 }
 
 
-// 组件挂载时获取途径点
-onMounted(() => {
-  fetchWaypoints()
+// 初始化弹窗位置到父容器中心
+const initializeModalPosition = () => {
+  if (!modalContentRef.value) return
+  
+  // 获取父容器（右侧面板）的尺寸
+  const parentContainer = modalContentRef.value.closest('.content-right')
+  if (!parentContainer) return
+  
+  // 获取遮罩层的内边距
+  const modalOverlay = modalContentRef.value.closest('.smart-route-detail-modal')
+  const overlayStyle = window.getComputedStyle(modalOverlay)
+  const paddingLeft = parseInt(overlayStyle.paddingLeft) || 30
+  const paddingTop = parseInt(overlayStyle.paddingTop) || 30
+  const paddingRight = parseInt(overlayStyle.paddingRight) || 30
+  const paddingBottom = parseInt(overlayStyle.paddingBottom) || 30
+  
+  // 计算可用空间
+  const availableWidth = parentContainer.clientWidth - paddingLeft - paddingRight
+  const availableHeight = parentContainer.clientHeight - paddingTop - paddingBottom
+  const modalWidth = modalContentRef.value.offsetWidth
+  const modalHeight = modalContentRef.value.offsetHeight
+  
+  // 计算居中位置（相对于遮罩层的内容区域）
+  const centerX = Math.max(0, (availableWidth - modalWidth) / 2)
+  const centerY = Math.max(0, (availableHeight - modalHeight) / 2)
+  
+  modalPosition.value = {
+    x: centerX,
+    y: centerY
+  }
+  
+  console.log('弹窗初始化位置:', {
+    parentSize: { width: parentContainer.clientWidth, height: parentContainer.clientHeight },
+    modalSize: { width: modalWidth, height: modalHeight },
+    position: modalPosition.value
+  })
+}
+
+// 组件挂载时获取途径点并初始化位置
+onMounted(async () => {
+  await fetchWaypoints()
+  
+  // 延迟初始化位置，确保DOM完全渲染
+  setTimeout(() => {
+    initializeModalPosition()
+  }, 100)
+})
+
+// 组件卸载时清理事件监听器
+onUnmounted(() => {
+  stopDrag()
 })
 </script>
 
 <style scoped>
-/* 弹窗遮罩 */
+/* 弹窗遮罩 - 改为相对于父容器定位 */
 .smart-route-detail-modal {
-  position: fixed;
+  position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.3);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(4px);
+  z-index: 9999;
+  backdrop-filter: blur(2px);
   animation: modalShow 0.3s ease;
+  padding: 30px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 @keyframes modalShow {
@@ -353,13 +477,25 @@ onMounted(() => {
 /* 弹窗内容 */
 .modal-content {
   background: white;
-  border-radius: 16px;
-  width: 90%;
-  max-width: 900px;
-  max-height: 85vh;
+  border-radius: 12px;
+  width: calc(100% - 60px);
+  max-width: 700px;
+  min-width: 600px;
+  height: calc(100% - 60px);
+  max-height: 650px;
+  min-height: 450px;
   overflow: hidden;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   animation: modalContentShow 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: v-bind('modalPosition.y + "px"');
+  left: v-bind('modalPosition.x + "px"');
+  /* 防止内容溢出 */
+  contain: layout style;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  z-index: 10000;
 }
 
 @keyframes modalContentShow {
@@ -378,16 +514,35 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
+  padding: 16px 20px;
   border-bottom: 1px solid #e9ecef;
   background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
   color: white;
+  flex-shrink: 0;
+  cursor: move;
+  user-select: none;
+}
+
+.modal-header:active {
+  cursor: grabbing;
 }
 
 .modal-header h3 {
   margin: 0;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.drag-hint {
+  font-size: 12px;
+  opacity: 0.8;
+  font-weight: 400;
 }
 
 .close-button {
@@ -408,17 +563,41 @@ onMounted(() => {
 
 /* 弹窗主体 */
 .modal-body {
-  padding: 24px;
-  max-height: calc(85vh - 80px);
+  padding: 20px;
+  flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  /* 自定义滚动条样式 */
+  scrollbar-width: thin;
+  scrollbar-color: #4CAF50 #f1f1f1;
+}
+
+/* Webkit 浏览器滚动条样式 */
+.modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+  background: #4CAF50;
+  border-radius: 3px;
+}
+
+.modal-body::-webkit-scrollbar-thumb:hover {
+  background: #45a049;
 }
 
 /* 匹配度评分部分 */
 .match-score-section {
-  margin-bottom: 24px;
-  padding: 20px;
+  margin-bottom: 16px;
+  padding: 16px;
   background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-radius: 12px;
+  border-radius: 8px;
   border: 2px solid #4CAF50;
 }
 
@@ -482,7 +661,7 @@ onMounted(() => {
 
 /* 基本信息部分 */
 .route-basic-info {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .route-basic-info h4 {
@@ -496,7 +675,7 @@ onMounted(() => {
 
 .info-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
 }
 
@@ -543,7 +722,7 @@ onMounted(() => {
 
 /* 途径点部分 */
 .waypoints-section {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .waypoints-section h4 {
@@ -699,23 +878,71 @@ onMounted(() => {
   transform: translateY(-1px);
 }
 
-/* 响应式设计 */
-@media (max-width: 768px) {
+/* 响应式设计 - 针对面板内显示优化 */
+
+/* 面板内弹窗的基础适配 */
+@media (max-width: 800px) {
   .modal-content {
-    width: 95%;
-    max-height: 90vh;
+    width: calc(100% - 40px);
+    max-width: none;
+    min-width: 400px;
+    height: calc(100% - 40px);
+  }
+  
+  .smart-route-detail-modal {
+    padding: 20px;
+  }
+}
+
+/* 更小面板的适配 */
+@media (max-width: 600px) {
+  .modal-content {
+    width: calc(100% - 20px);
+    max-width: none;
+    min-width: 350px;
+    height: calc(100% - 20px);
+  }
+  
+  .smart-route-detail-modal {
+    padding: 10px;
   }
   
   .modal-header {
-    padding: 16px 20px;
+    padding: 12px 16px;
+  }
+  
+  .modal-header h3 {
+    font-size: 16px;
+  }
+  
+  .drag-hint {
+    display: none;
   }
   
   .modal-body {
-    padding: 20px;
+    padding: 16px;
+  }
+  
+  .match-score-section {
+    padding: 12px;
+    margin-bottom: 12px;
   }
   
   .info-grid {
     grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  
+  .info-item {
+    padding: 8px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .info-item .label {
+    margin-bottom: 4px;
+    margin-right: 0;
+    min-width: auto;
   }
   
   .score-details {
@@ -723,8 +950,9 @@ onMounted(() => {
   }
   
   .waypoint-item {
+    padding: 10px;
     flex-direction: column;
-    gap: 12px;
+    gap: 6px;
   }
   
   .waypoint-index {
@@ -734,11 +962,36 @@ onMounted(() => {
   
   .modal-actions {
     flex-direction: column;
+    gap: 8px;
   }
   
   .action-button {
     width: 100%;
     justify-content: center;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+}
+
+/* 更大面板时的优化 */
+@media (min-width: 601px) {
+  .info-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .score-details {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* 超大弹窗时的优化 */
+@media (min-width: 801px) {
+  .info-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .score-details {
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 </style>

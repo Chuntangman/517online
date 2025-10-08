@@ -1,0 +1,62 @@
+# Node modules
+node_modules
+server/node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 环境变量文件
+.env
+.env.*
+server/.env
+server/.env.*
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.vscode
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 日志
+logs
+*.log
+datagear-5.5.0/logs/*
+
+# 构建产物
+dist
+dist-ssr
+build
+.next
+
+# 测试
+coverage
+.nyc_output
+
+# 临时文件
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# DataGear 临时数据
+datagear-5.5.0/datagear-data/temp/*
+datagear-5.5.0/derby.log
+
+# 文档（可选，如果想在镜像中包含文档则移除）
+*.md
+!README.md
+
+# Docker 文件
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+

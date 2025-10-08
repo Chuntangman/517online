@@ -1,0 +1,103 @@
+version: '3.8'
+
+# 517骑行驿站 - Docker Compose 配置（本地测试）
+# 用途：在 Windows 本地测试 Docker 镜像
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: 517-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: 517database
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 6912190819
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d 517database"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  # 后端服务
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: chuntangman/517-backend:latest
+    container_name: 517-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: 517database
+      DB_USER: postgres
+      DB_PASSWORD: 6912190819
+      API_PREFIX: /api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  # 前端服务
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_BASE_URL=http://localhost:3000
+        - VITE_DATAGEAR_URL=http://localhost:50401
+        - VITE_AMAP_API_KEY=b7fb4f223f6cbffc2d995a508d10f7cd
+    image: chuntangman/517-frontend:latest
+    container_name: 517-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  # DataGear 服务
+  datagear:
+    build:
+      context: ./datagear-5.5.0
+      dockerfile: Dockerfile
+    image: chuntangman/517-datagear:latest
+    container_name: 517-datagear
+    restart: unless-stopped
+    environment:
+      JAVA_OPTS: "-Xmx1g -Xms256m"
+      DG_APP_HOME: /app
+    volumes:
+      - datagear_data:/app/datagear-data
+      - datagear_logs:/app/logs
+    ports:
+      - "50401:50401"
+    networks:
+      - app-network
+
+volumes:
+  postgres_data:
+    driver: local
+  datagear_data:
+    driver: local
+  datagear_logs:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
+
